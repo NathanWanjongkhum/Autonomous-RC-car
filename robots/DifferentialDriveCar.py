@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class DifferentialDriveCar:
     """
     Models a differential drive car with rectangular dimensions
@@ -28,7 +29,9 @@ class DifferentialDriveCar:
         self.wheel_distance = wheel_distance  # Distance between wheels (meters)
         self.wheel_radius = wheel_radius  # Wheel radius (meters)
         self.max_velocity = max_velocity  # Maximum linear velocity (m/s)
-        self.max_angular_velocity = max_angular_velocity  # Maximum angular velocity (rad/s)
+        self.max_angular_velocity = (
+            max_angular_velocity  # Maximum angular velocity (rad/s)
+        )
 
         # Control variables
         self.v_l = 0  # Left wheel velocity (m/s)
@@ -91,14 +94,9 @@ class DifferentialDriveCar:
         # Calculate wheel velocities from robot velocities
         # For differential drive: v_l = v - (omega * L/2), v_r = v + (omega * L/2)
         # where L is the distance between wheels
-        self.v_l = v - (omega * self.wheel_distance / 2)
-        self.v_r = v + (omega * self.wheel_distance / 2)
-
-        # Ensure wheel velocities don't exceed limits
-        # If they would, scale both proportionally
-        scale = max(1, max(abs(self.v_l), abs(self.v_r)) / self.max_velocity)
-        self.v_l /= scale
-        self.v_r /= scale
+        self.set_wheel_velocities(
+            v - (omega * self.wheel_distance / 2), v + (omega * self.wheel_distance / 2)
+        )
 
         # Update the overall velocity and angular velocity
         self.v = v

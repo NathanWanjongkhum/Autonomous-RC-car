@@ -1,7 +1,8 @@
 import numpy as np
 import cv2
 import math
-
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 
 class APF:
     """
@@ -11,12 +12,12 @@ class APF:
 
     MIN_FRONTIER_SIZE = 10
 
-    def __init__(self, car, occupancy_grid):
+    def __init__(self, car, grid):
         # robot configuration (q)
         self.car = car
 
         # obstacles (q_o)
-        self.occupancy_grid = occupancy_grid
+        self.grid = grid
 
         # goal configuration (q_g)
         self.goal_x = 0.0
@@ -35,7 +36,7 @@ class APF:
         # Repulsive constant (epsilon_r)
         self.epsilon_r = 0.1
 
-    def attractive_force(self, target):
+    def attractive_force(self, target=None):
         """
         U_attr(q,q_g)
         Calculate attractive force toward the target (nearest frontier point)
@@ -75,8 +76,8 @@ class APF:
 
     def get_obstacle_positions(self):
         """Extract obstacle positions from the occupancy grid"""
-        obstacles = np.where(self.occupancy_grid == 1)  # Assuming 1 = obstacle
-        return list(zip(obstacles[1], obstacles[0]))  # (x, y) format
+        obstacles = np.where(self.grid.grid == 1)
+        return list(zip(obstacles[1], obstacles[0]))
 
     def repulsive_force(self):
         """
@@ -104,32 +105,150 @@ class APF:
         return total_force
 
     def detect_frontiers(self):
-        frontiers = []
+        """Detect frontiers between explored and unexplored areas using probability thresholds"""
+        # Define probability thresholds
+        free_threshold = 0.4      # Cells with p < 0.4 are considered free
+        occ_threshold = 0.6       # Cells with p > 0.6 are considered occupied
+        # Values between are considered unknown/uncertain
         
-        # Kernel for 8-connectivity check
+        # Create masks based on probability thresholds
+        free_space = (self.grid.grid < free_threshold).astype(np.uint8)
+        obstacle = (self.grid.grid > occ_threshold).astype(np.uint8)
+        unknown = (~(free_space | obstacle)).astype(np.uint8)  # Everything else is unknown
+        
+        # Combined grid for visualization
+        combined_grid = np.zeros_like(self.grid.grid)
+        combined_grid[free_space == 1] = 1  # Free space
+        combined_grid[unknown == 1] = 2     # Unknown
+        combined_grid[obstacle == 1] = 3    # Obstacle
+
+        # Frontier detection - need kernel for dilation
         kernel = np.ones((3, 3), np.uint8)
-        kernel[1, 1] = 0
-        
-        # Free space = 0, Unknown = -1, Obstacle = 1
-        free_space = (self.occupancy_grid == 0).astype(np.uint8)
-        unknown = (self.occupancy_grid == -1).astype(np.uint8)
+        kernel[1, 1] = 0  # Exclude center pixel
         
         # Dilate free space
         free_dilated = cv2.dilate(free_space, kernel, iterations=1)
         
-        # Frontier is where dilated free space meets unknown
+        # Frontier cells: where dilated free space meets unknown
         frontier_cells = free_dilated & unknown
         
-        # Group frontier cells into regions
+        # Labeled frontiers with centroids
         num_labels, labels = cv2.connectedComponents(frontier_cells)
         
-        # Get centroids of each frontier region
+        # Find centroids
+        frontiers = []
         for label in range(1, num_labels):
             points = np.where(labels == label)
             if len(points[0]) > APF.MIN_FRONTIER_SIZE:
                 centroid = (np.mean(points[1]), np.mean(points[0]))
                 frontiers.append(centroid)
-                
+        
+        return frontiers
+
+    def detect_frontiers_debug(self):
+        """Detect frontiers between explored and unexplored areas using probability thresholds"""
+        # Setup figure with subplots
+        fig, axs = plt.subplots(3, 3, figsize=(12, 10))
+        
+        # Define probability thresholds
+        free_threshold = 0.4      # Cells with p < 0.4 are considered free
+        occ_threshold = 0.6       # Cells with p > 0.6 are considered occupied
+        # Values between are considered unknown/uncertain
+        
+        # Create masks based on probability thresholds
+        free_space = (self.grid.grid < free_threshold).astype(np.uint8)
+        obstacle = (self.grid.grid > occ_threshold).astype(np.uint8)
+        unknown = (~(free_space | obstacle)).astype(np.uint8)  # Everything else is unknown
+        
+        # First row: Display binary masks
+        axs[0, 0].imshow(free_space, cmap='binary')
+        axs[0, 0].set_title('Free Space (p < 0.4)')
+        axs[0, 0].set_xticks([])
+        axs[0, 0].set_yticks([])
+
+        axs[0, 1].imshow(unknown, cmap='binary')
+        axs[0, 1].set_title('Unknown (0.4 <= p <= 0.6)')
+        axs[0, 1].set_xticks([])
+        axs[0, 1].set_yticks([])
+
+        axs[0, 2].imshow(obstacle, cmap='binary')
+        axs[0, 2].set_title('Obstacle (p > 0.6)')
+        axs[0, 2].set_xticks([])
+        axs[0, 2].set_yticks([])
+
+        # Second row, left: Original probability grid as heatmap
+        probability_img = axs[1, 0].imshow(self.grid.grid, cmap='plasma', vmin=0, vmax=1)
+        axs[1, 0].set_title('Probability Grid')
+        axs[1, 0].set_xticks([])
+        axs[1, 0].set_yticks([])
+        fig.colorbar(probability_img, ax=axs[1, 0], orientation='vertical', fraction=0.046, pad=0.04)
+        
+        # Combined grid for visualization
+        combined_grid = np.zeros_like(self.grid.grid)
+        combined_grid[free_space == 1] = 1  # Free space
+        combined_grid[unknown == 1] = 2     # Unknown
+        combined_grid[obstacle == 1] = 3    # Obstacle
+        
+        cmap = ListedColormap(['black', 'white', 'gray', 'red'])
+        axs[1, 1].imshow(combined_grid, cmap=cmap)
+        axs[1, 1].set_title('Thresholded Grid')
+        axs[1, 1].set_xticks([])
+        axs[1, 1].set_yticks([])
+        
+        # Frontier detection - need kernel for dilation
+        kernel = np.ones((3, 3), np.uint8)
+        kernel[1, 1] = 0  # Exclude center pixel
+        
+        # Dilate free space
+        free_dilated = cv2.dilate(free_space, kernel, iterations=1)
+        axs[1, 2].imshow(free_dilated, cmap='binary')
+        axs[1, 2].set_title('Dilated Free Space')
+        axs[1, 2].set_xticks([])
+        axs[1, 2].set_yticks([])
+        
+        # Frontier cells: where dilated free space meets unknown
+        frontier_cells = free_dilated & unknown
+        axs[2, 0].imshow(frontier_cells, cmap='binary')
+        axs[2, 0].set_title('Frontier Cells')
+        axs[2, 0].set_xticks([])
+        axs[2, 0].set_yticks([])
+        
+        # Labeled frontiers with centroids
+        num_labels, labels = cv2.connectedComponents(frontier_cells)
+        
+        # Random colormap for the labels
+        label_cmap = plt.colormaps['coolwarm'].resampled(10)
+        
+        # Show labeled regions
+        axs[2, 1].imshow(labels, cmap=label_cmap)
+        axs[2, 1].set_title(f'Labeled Frontiers ({num_labels-1} regions)')
+        axs[2, 1].set_xticks([])
+        axs[2, 1].set_yticks([])
+        
+        # Find and plot centroids
+        frontiers = []
+        for label in range(1, num_labels):
+            points = np.where(labels == label)
+            if len(points[0]) > APF.MIN_FRONTIER_SIZE:
+                centroid = (np.mean(points[1]), np.mean(points[0]))
+                frontiers.append(centroid)
+                axs[2, 1].plot(centroid[0], centroid[1], 'wo', markersize=8)
+                axs[2, 1].plot(centroid[0], centroid[1], 'ko', markersize=6)
+        
+        # Overlay frontiers on original grid
+        axs[2, 2].imshow(self.grid.grid, cmap='plasma', vmin=0, vmax=1)
+        axs[2, 2].set_title('Frontiers on Probability Grid')
+        axs[2, 2].set_xticks([])
+        axs[2, 2].set_yticks([])
+        
+        # Mark frontiers on the probability grid
+        for centroid in frontiers:
+            axs[2, 2].plot(centroid[0], centroid[1], 'wo', markersize=8)
+            axs[2, 2].plot(centroid[0], centroid[1], 'ko', markersize=6)
+        
+        plt.tight_layout()
+        plt.show()
+        
         return frontiers
 
     def calculate_forces(self):
@@ -186,7 +305,7 @@ class APF:
         # Solve for Jacobian matrix
         if e == 0:
             jacobian_matrix = (
-                np.matrix(
+                np.array(
                     [
                         [math.cos(theta), math.sin(theta)],
                         [math.sin(theta), math.cos(theta)],
@@ -197,7 +316,7 @@ class APF:
         else:
             factor = b / e
             jacobian_matrix = (
-                np.matrix([
+                np.array([
                     [
                         math.cos(theta) + factor * math.sin(theta),
                         math.sin(theta) - factor * math.cos(theta),
@@ -212,8 +331,11 @@ class APF:
         # Solve for omegas
         u = jacobian_matrix @ eta
         
-        # u[0] = v_l, u[1] = v_r
-        return (u[0], u[1])
+        # Convert to Python scalers
+        v_l = float(u[0])
+        v_r = float(u[1])
+
+        return (v_l, v_r)
 
 ## Example of using the APF class
 # car = Car(x=0, y=0, theta=0)  # Define car with required attributes

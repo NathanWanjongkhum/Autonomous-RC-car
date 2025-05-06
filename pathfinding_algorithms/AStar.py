@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 
 class AStarPlanner:
@@ -43,18 +44,7 @@ class AStarPlanner:
         neighbors = []
 
         # Define 8-connected grid (diagonal and orthogonal neighbors)
-        directions = [
-            # Orthogonal
-            (0, 1),
-            (1, 0),
-            (0, -1),
-            (-1, 0),  
-            # Diagonal
-            (1, 1),
-            (1, -1),
-            (-1, -1),
-            (-1, 1),  
-        ]
+        directions = np.array(list(itertools.product([-1, 0, 1], repeat=2)))
 
         for dx, dy in directions:
             nx, ny = x + dx, y + dy

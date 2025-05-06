@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import math
 
 from maps.OccupancyGrid import OccupancyGrid
 from robots.DifferentialDriveCar import DifferentialDriveCar
@@ -179,9 +180,9 @@ class Simulation:
                 # Check if ray is outside the environment
                 if (
                     ray_x < 0
-                    or ray_x >= self.grid.width
+                    or ray_x >= self.grid.grid_width
                     or ray_y < 0
-                    or ray_y >= self.grid.height
+                    or ray_y >= self.grid.grid_height
                 ):
                     ranges.append(d)
                     break
@@ -232,11 +233,9 @@ class Simulation:
             self.car.set_velocities(0.2, angular_velocity)
         if algorithm == "apf":
             # Get steering command from APT
-            explorer = APF(occupancy_grid=self.grid, car=self.car)
-            angular_velocity = explorer.compute_steering()
-
-            # Set car velocities (constant forward speed, varying steering)
-            self.car.set_velocities(0.2, angular_velocity)
+            explorer = APF(grid=self.grid, car=self.car)
+            v_l, v_r = explorer.compute_steering()
+            self.car.set_wheel_velocities(v_l, v_r)
         else:
             # For testing, just move forward
             self.car.set_velocities(0.2, 0.0)
