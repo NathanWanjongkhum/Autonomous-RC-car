@@ -19,6 +19,19 @@ class APF:
         # obstacles (q_o)
         self.grid = grid
 
+        # Data collection for plotting
+        self.time_steps = []
+        self.heading_error_history = []
+        self.angular_velocity_history = []
+        self.goal_angle_history = []
+        self.desired_heading_history = []
+        self.current_theta_history = []
+        self.step_counter = 0
+        
+        # Setup plotting
+        self.fig, self.axs = plt.subplots(3, 1, figsize=(10, 12))
+        self.setup_plots()
+
         # goal configuration (q_g)
         self.goal_x = 0.0
         self.goal_y = 0.0
@@ -26,16 +39,65 @@ class APF:
         self.q_max = 2
 
         # Distance threshold (Q_g)
-        self.q_safe = 0.1
+        self.q_safe = 0.2
         # Parabolic attractive constant (epsilon_q)
-        self.epsilon_q = 0.1
+        self.epsilon_q = 0.5
         # Conic repulsive constant (epsilon_c)
-        self.epsilon_c = 0.1
+        self.epsilon_c = 0.5
         # Parabolic-Conic repulsive constant (epsilon_d)
         self.epsilon_d = self.epsilon_q / self.epsilon_c
         # Repulsive constant (epsilon_r)
-        self.epsilon_r = 0.1
+        self.epsilon_r = 0.5
 
+    def setup_plots(self):
+        """Initialize the plot structure"""
+        # First subplot: Heading angles
+        self.axs[0].set_title('Heading Angles')
+        self.axs[0].set_ylabel('Angle (radians)')
+        self.axs[0].grid(True)
+        
+        # Second subplot: Heading error
+        self.axs[1].set_title('Heading Error')
+        self.axs[1].set_ylabel('Error (radians)')
+        self.axs[1].grid(True)
+        
+        # Third subplot: Angular velocity
+        self.axs[2].set_title('Angular Velocity')
+        self.axs[2].set_xlabel('Time Step')
+        self.axs[2].set_ylabel('Angular Velocity (rad/s)')
+        self.axs[2].grid(True)
+        
+        # Initialize empty lines
+        self.goal_line, = self.axs[0].plot([], [], 'r-', label='Goal Angle')
+        self.desired_line, = self.axs[0].plot([], [], 'g-', label='Desired Heading')
+        self.current_line, = self.axs[0].plot([], [], 'b-', label='Current Heading')
+        self.error_line, = self.axs[1].plot([], [], 'k-', label='Heading Error')
+        self.velocity_line, = self.axs[2].plot([], [], 'm-', label='Angular Velocity')
+        
+        self.axs[0].legend()
+        
+        plt.tight_layout()
+        plt.ion()  # Interactive mode on
+        
+    def update_plot(self):
+        """Update the plot with the latest data"""
+        # Update lines
+        self.goal_line.set_data(self.time_steps, self.goal_angle_history)
+        self.desired_line.set_data(self.time_steps, self.desired_heading_history)
+        self.current_line.set_data(self.time_steps, self.current_theta_history)
+        self.error_line.set_data(self.time_steps, self.heading_error_history)
+        self.velocity_line.set_data(self.time_steps, self.angular_velocity_history)
+        
+        # Draw the updated figure
+        self.fig.canvas.draw_idle()
+        self.fig.canvas.flush_events()
+
+    def save_plots(self, filename="apf_performance.png"):
+        """Save the current plots to a file"""
+        plt.figure(self.fig.number)
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"Plots saved to {filename}")
+    
     def attractive_force(self, target=None):
         """
         U_attr(q,q_g)
@@ -280,63 +342,65 @@ class APF:
         return f_attr, f_rep
 
     def compute_steering(self):
-        # world angle
+        # Get car's current state
         theta = self.car.theta
-        # Wheel base
-        b = self.car.wheel_distance
-        # Vehicle speed
-        velocity = self.car.v
-        # Radius of the wheels
-        r = self.car.wheel_radius
-        # Set e to 0 for standard differential drive
-        e = 0
-        # Create rotation matrix from world to robot frame
-        rotation_matrix = np.array(
-            [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]
-        )
         
-        # Calculate forces
-        f_attr, f_rep = self.calculate_forces()
-        F = f_attr + rotation_matrix @ f_rep
-        
-        # Compute wheel velocities
-        eta = velocity * F
-        
-        # Solve for Jacobian matrix
-        if e == 0:
-            jacobian_matrix = (
-                np.array(
-                    [
-                        [math.cos(theta), math.sin(theta)],
-                        [math.sin(theta), math.cos(theta)],
-                    ]
-                )
-                / r
-            )
-        else:
-            factor = b / e
-            jacobian_matrix = (
-                np.array([
-                    [
-                        math.cos(theta) + factor * math.sin(theta),
-                        math.sin(theta) - factor * math.cos(theta),
-                    ],
-                    [
-                        math.cos(theta) - factor * math.sin(theta),
-                        math.sin(theta) + factor * math.cos(theta),
-                    ],
-                ]) / r
-            )
+        # Find frontiers and select the best one
+        frontiers = self.detect_frontiers()
+        if frontiers:
+            # Find closest frontier
+            distances = [np.hypot(self.car.x - f[0], self.car.y - f[1]) for f in frontiers]
+            nearest_frontier = frontiers[np.argmin(distances)]
             
-        # Solve for omegas
-        u = jacobian_matrix @ eta
+            # Set this as the goal
+            self.goal_x, self.goal_y = nearest_frontier
+            
+            # Calculate angle to the goal (in world frame)
+            goal_angle = np.arctan2(self.goal_y - self.car.y, self.goal_x - self.car.x)
+            
+            # Calculate attractive and repulsive forces
+            f_attr, f_rep = self.calculate_forces()
+            
+            # Create rotation matrix
+            rotation_matrix = np.array([
+                [np.cos(theta), -np.sin(theta)], 
+                [np.sin(theta), np.cos(theta)]
+            ])
+            
+            # Combine forces to get resultant direction
+            F = f_attr + rotation_matrix @ f_rep
+            
+            # Desired heading from force vector
+            desired_heading = np.arctan2(F[1], F[0])
+            
+            # Calculate heading error
+            heading_error = desired_heading - theta
+            # Normalize to [-pi, pi]
+            heading_error = np.arctan2(np.sin(heading_error), np.cos(heading_error))
+            
+            # Calculate angular velocity based on heading error
+            k_p = 1.0  # Proportional gain
+            angular_velocity = k_p * heading_error
+
+            # Record data for plotting
+            self.time_steps.append(self.step_counter)
+
+            self.heading_error_history.append(heading_error)
+            self.angular_velocity_history.append(angular_velocity)
+            self.goal_angle_history.append(goal_angle)
+            self.desired_heading_history.append(desired_heading)
+            self.current_theta_history.append(theta)
+            self.step_counter += 1
+            
+            # Update the plot every N steps to avoid slowing down simulation
+            if self.step_counter % 5 == 0:
+                self.update_plot()
         
-        # Convert to Python scalers
-        v_l = float(u[0])
-        v_r = float(u[1])
-
-        return (v_l, v_r)
-
+            return angular_velocity
+        else:
+            # No frontiers found, maintain current direction
+            return 0.0
+        
 ## Example of using the APF class
 # car = Car(x=0, y=0, theta=0)  # Define car with required attributes
 # grid = build_occupancy_grid()  # Create grid from stereovision

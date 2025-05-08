@@ -20,7 +20,7 @@ class Simulation:
     handles visualization and sensor simulation.
     """
 
-    def __init__(self, width=10.0, height=10.0, resolution=0.05):
+    def __init__(self, car, grid, explorer_algorithm, pure_pursuit):
         """
         Initialize the simulation
 
@@ -28,20 +28,13 @@ class Simulation:
         width, height: Size of the environment in meters
         resolution: Grid resolution in meters
         """
-        # Create the occupancy grid
-        self.grid = OccupancyGrid(width, height, resolution)
-
-        # Create the car
-        self.car = DifferentialDriveCar(x=2.0, y=2.0, theta=0.0)
-
-        # Create path planners and controllers
-        self.wall_follower = WallFollower(self.grid)
-        self.path_planner = AStarPlanner(self.grid)
-        self.pure_pursuit = PurePursuit()
+        self.car = car
+        self.grid = grid
+        self.explorer_algorithm = explorer_algorithm
+        self.pure_pursuit = pure_pursuit
 
         # Simulation parameters
         self.dt = 0.1  # Time step in seconds
-        self.max_steps = 1000  # Maximum simulation steps
         self.current_step = 0
 
         # Path and mapping
@@ -212,43 +205,6 @@ class Simulation:
         # Record visited position
         self.visited_positions.append((self.car.x, self.car.y))
 
-    def phase1_exploration(self, algorithm="apf"):
-        """
-        Perform Phase 1 exploration of the environment
-
-        This method controls the car to explore the environment and build
-        a map using the wall following algorithm.
-
-        Parameters:
-        use_wall_following: Whether to use wall following or just predefined path
-        """
-        # Use wall following for exploration
-        if algorithm == "wall_following":
-            # Get steering command from wall follower
-            angular_velocity = self.wall_follower.compute_steering(
-                self.car.x, self.car.y, self.car.theta, 0.2
-            )
-
-            # Set car velocities (constant forward speed, varying steering)
-            self.car.set_velocities(0.2, angular_velocity)
-        if algorithm == "apf":
-            # Get steering command from APT
-            explorer = APF(grid=self.grid, car=self.car)
-            v_l, v_r = explorer.compute_steering()
-            self.car.set_wheel_velocities(v_l, v_r)
-        else:
-            # For testing, just move forward
-            self.car.set_velocities(0.2, 0.0)
-
-        # Update car state
-        self.car.update_state(self.dt)
-
-        # Sense environment and update map
-        self.sense_environment()
-
-        # Increment step counter
-        self.current_step += 1
-
     def plan_optimal_path(self, start_x, start_y, goal_x, goal_y):
         """
         Plan an optimal path from start to goal
@@ -386,41 +342,40 @@ class Simulation:
         self.fig.canvas.draw()
         plt.pause(0.01)
 
-    def run_simulation(self, mode="exploration", num_steps=None):
+    def run_exploration(self, max_steps=250): 
         """
-        Run the simulation
+        Run the exploration phase of the simulation
 
         Parameters:
-        mode: 'exploration' for Phase 1, 'execution' for Phase 2
-        num_steps: Number of steps to run, or None for max_steps
+        max_steps: Maximum number of steps to run (default: 250)
         """
-        if num_steps is None:
-            num_steps = self.max_steps
-
+        if self.explorer_algorithm is None:
+            print("No exploration algorithm specified. Skipping...")
+            return
+        
         # Initialize visualization
         self.initialize_visualization()
 
-        # Reset step counter
-        self.current_step = 0
-
-        print(f"Running simulation for {num_steps} steps...")
+        print(f"Running simulation for {max_steps} steps...")
         # Run simulation loop
-        for step in range(num_steps):
-            print(f"Step {step}")
-            if mode == "exploration":
-                self.phase1_exploration()
-            elif mode == "execution":
-                self.phase2_execution()
+        for step in range(max_steps):
+            # Compute steering command
+            av = self.explorer_algorithm.compute_steering()
+            
+            self.car.set_velocities(0.2, av)
 
+            # Update car state
+            self.car.update_state(self.dt)
+
+            # Sense environment and update map
+            self.sense_environment()
+        
             # Update visualization every few steps
             if step % 5 == 0:
                 self.update_visualization()
 
-            # Check termination conditions
-            if self.current_step >= self.max_steps:
-                break
-
         print("Simulation complete!")
+        self.explorer_algorithm.save_plots()
 
         # Final update
         self.update_visualization()
@@ -429,19 +384,27 @@ class Simulation:
 
 
 def main():
-    # Create simulation
-    sim = Simulation(width=10.0, height=10.0, resolution=0.05)
+    car = DifferentialDriveCar(x=2.0, y=2.0, theta=0.0)
+    grid = OccupancyGrid(width=10.0, height=10.0, resolution=0.05)
+    apf = APF(car, grid)
+    pure_pursuit = PurePursuit()
+    # pid = PIDController(kp=0.5, ki=0.0, kd=0.0)
+    # pathfinder_algorithm = KKT(grid, pid)
+    
+    # sim = Simulation(car=car, grid=grid, explorer_algorithm=None, pure_pursuit=pure_pursuit)
+    sim = Simulation(car=car, grid=grid, explorer_algorithm=apf, pure_pursuit=pure_pursuit)
 
     # Create track
     sim.create_track(track_type="simple")
 
+    #### Debugging ####
     # sim.initialize_visualization()
     # sim.update_visualization()
     # plt.show()
 
     # Phase 1: Exploration
     print("Running Phase 1: Exploration...")
-    sim.run_simulation(mode="exploration", num_steps=10)
+    sim.run_exploration(max_steps=250)
 
     # # Process map and plan optimal path
     # start_x, start_y = sim.car.x, sim.car.y

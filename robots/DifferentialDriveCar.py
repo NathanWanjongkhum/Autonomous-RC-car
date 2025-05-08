@@ -54,20 +54,20 @@ class DifferentialDriveCar:
         dt: Time step in seconds
         """
         # Calculate linear and angular velocity from wheel velocities
-        self.v = (self.v_r + self.v_l) / 2
-        self.omega = (self.v_r - self.v_l) / self.wheel_distance
+        # self.v = (self.v_r + self.v_l) / 2
+        # self.omega = (self.v_r - self.v_l) / self.wheel_distance
 
         # Update state using basic differential drive kinematics
         self.x += self.v * np.cos(self.theta) * dt
         self.y += self.v * np.sin(self.theta) * dt
         self.theta += self.omega * dt
-
+        
         # Normalize theta to (-pi, pi) to prevent growing continuously
         self.theta = np.arctan2(np.sin(self.theta), np.cos(self.theta))
 
     def set_wheel_velocities(self, v_l, v_r):
         """
-        Set the wheel velocities directly, respecting maximum limits
+        Set the wheel velocities independently, respecting maximum limits
 
         Parameters:
         v_l: Left wheel velocity (m/s)
