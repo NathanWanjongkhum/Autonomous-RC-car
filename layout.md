@@ -127,9 +127,12 @@ Main simulation environment that integrates all components.
 
 1. Simulation creates an OccupancyGrid and DifferentialDriveCar
 2. Phase 1 (Exploration):
-   - WallFollower computes steering commands based on sensed environment
-   - Car updates its state based on these commands
-   - Environment is sensed and OccupancyGrid is updated
+   - Car senses the environment and updates occupancy grid
+   - Generates a goal state on the boundary of unknown space
+   - Copmutes a path to the goal state
+   - If off track, Pure-Pursuit steers to follow the path
+   - PID regulates speed and steering
+   - Take a step forward and repeat
 3. Intermediate Phase:
    - AStarPlanner computes optimal path through the processed OccupancyGrid
    - Path is stored for Phase 2

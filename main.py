@@ -12,6 +12,7 @@ from pathfinding_algorithms.PurePursuit import PurePursuit
 from pathfinding_algorithms.WallFollower import WallFollower
 from pathfinding_algorithms.AStar import AStarPlanner
 
+
 class Simulation:
     """
     Simulation environment for the car and track
@@ -20,7 +21,7 @@ class Simulation:
     handles visualization and sensor simulation.
     """
 
-    def __init__(self, car, grid, explorer_algorithm, pure_pursuit):
+    def __init__(self, car: DifferentialDriveCar, grid: OccupancyGrid):
         """
         Initialize the simulation
 
@@ -54,11 +55,13 @@ class Simulation:
         track_type: Type of track to create ('simple', 'oval', 'complex')
         """
         # Clear the binary grid before creating track
-        self.grid.binary_grid = np.zeros((self.grid.grid_height, self.grid.grid_width), dtype=bool)
+        self.grid.binary_grid = np.zeros(
+            (self.grid.grid_height, self.grid.grid_width), dtype=bool
+        )
         # Make walls thicker for better detection
         wall_thickness = 1  # Cells
         wall_offset = self.grid.resolution / wall_thickness
-    
+
         if track_type == "simple":
             # Set parameters for inner track
             inner_margin_percent = 0.1  # 30% margin from the outer walls
@@ -66,51 +69,81 @@ class Simulation:
             inner_height = self.grid.height * (1 - 2 * inner_margin_percent)
             inner_start_x = self.grid.width * inner_margin_percent
             inner_start_y = self.grid.height * inner_margin_percent
-            
+
             # Outer walls - use your existing code
             # Bottom wall
             for x in np.arange(0.0, self.grid.width, self.grid.resolution):
                 for y in np.arange(-wall_offset, wall_offset, self.grid.resolution):
                     self.grid.update_cell(x, y, True)
-                    
+
             # Top wall
             for x in np.arange(0.0, self.grid.width, self.grid.resolution):
-                for y in np.arange(self.grid.height-wall_offset, self.grid.height+wall_offset, self.grid.resolution):
+                for y in np.arange(
+                    self.grid.height - wall_offset,
+                    self.grid.height + wall_offset,
+                    self.grid.resolution,
+                ):
                     self.grid.update_cell(x, y, True)
-                    
+
             # Left wall
             for y in np.arange(0.0, self.grid.height, self.grid.resolution):
                 for x in np.arange(-wall_offset, wall_offset, self.grid.resolution):
                     self.grid.update_cell(x, y, True)
-                    
+
             # Right wall
             for y in np.arange(0.0, self.grid.height, self.grid.resolution):
-                for x in np.arange(self.grid.width-wall_offset, self.grid.width+wall_offset, self.grid.resolution):
+                for x in np.arange(
+                    self.grid.width - wall_offset,
+                    self.grid.width + wall_offset,
+                    self.grid.resolution,
+                ):
                     self.grid.update_cell(x, y, True)
-            
+
             # Inner walls
             # Bottom inner wall
-            for x in np.arange(inner_start_x, inner_start_x + inner_width, self.grid.resolution):
-                for y in np.arange(inner_start_y - wall_offset, inner_start_y + wall_offset, self.grid.resolution):
+            for x in np.arange(
+                inner_start_x, inner_start_x + inner_width, self.grid.resolution
+            ):
+                for y in np.arange(
+                    inner_start_y - wall_offset,
+                    inner_start_y + wall_offset,
+                    self.grid.resolution,
+                ):
                     self.grid.update_cell(x, y, True)
-                    
+
             # Top inner wall
-            for x in np.arange(inner_start_x, inner_start_x + inner_width, self.grid.resolution):
-                for y in np.arange(inner_start_y + inner_height - wall_offset, 
-                                inner_start_y + inner_height + wall_offset, self.grid.resolution):
+            for x in np.arange(
+                inner_start_x, inner_start_x + inner_width, self.grid.resolution
+            ):
+                for y in np.arange(
+                    inner_start_y + inner_height - wall_offset,
+                    inner_start_y + inner_height + wall_offset,
+                    self.grid.resolution,
+                ):
                     self.grid.update_cell(x, y, True)
-                    
+
             # Left inner wall
-            for y in np.arange(inner_start_y, inner_start_y + inner_height, self.grid.resolution):
-                for x in np.arange(inner_start_x - wall_offset, inner_start_x + wall_offset, self.grid.resolution):
+            for y in np.arange(
+                inner_start_y, inner_start_y + inner_height, self.grid.resolution
+            ):
+                for x in np.arange(
+                    inner_start_x - wall_offset,
+                    inner_start_x + wall_offset,
+                    self.grid.resolution,
+                ):
                     self.grid.update_cell(x, y, True)
-                    
+
             # Right inner wall
-            for y in np.arange(inner_start_y, inner_start_y + inner_height, self.grid.resolution):
-                for x in np.arange(inner_start_x + inner_width - wall_offset, 
-                                inner_start_x + inner_width + wall_offset, self.grid.resolution):
+            for y in np.arange(
+                inner_start_y, inner_start_y + inner_height, self.grid.resolution
+            ):
+                for x in np.arange(
+                    inner_start_x + inner_width - wall_offset,
+                    inner_start_x + inner_width + wall_offset,
+                    self.grid.resolution,
+                ):
                     self.grid.update_cell(x, y, True)
-            
+
         elif track_type == "oval":
             # Oval track
             center_x, center_y = 5.0, 5.0
@@ -342,7 +375,7 @@ class Simulation:
         self.fig.canvas.draw()
         plt.pause(0.01)
 
-    def run_exploration(self, max_steps=250): 
+    def run_exploration(self, max_steps=250):
         """
         Run the exploration phase of the simulation
 
@@ -352,7 +385,7 @@ class Simulation:
         if self.explorer_algorithm is None:
             print("No exploration algorithm specified. Skipping...")
             return
-        
+
         # Initialize visualization
         self.initialize_visualization()
 
@@ -361,7 +394,7 @@ class Simulation:
         for step in range(max_steps):
             # Compute steering command
             av = self.explorer_algorithm.compute_steering()
-            
+
             self.car.set_velocities(0.2, av)
 
             # Update car state
@@ -369,7 +402,7 @@ class Simulation:
 
             # Sense environment and update map
             self.sense_environment()
-        
+
             # Update visualization every few steps
             if step % 5 == 0:
                 self.update_visualization()
@@ -390,9 +423,11 @@ def main():
     pure_pursuit = PurePursuit()
     # pid = PIDController(kp=0.5, ki=0.0, kd=0.0)
     # pathfinder_algorithm = KKT(grid, pid)
-    
+
     # sim = Simulation(car=car, grid=grid, explorer_algorithm=None, pure_pursuit=pure_pursuit)
-    sim = Simulation(car=car, grid=grid, explorer_algorithm=apf, pure_pursuit=pure_pursuit)
+    sim = Simulation(
+        car=car, grid=grid, explorer_algorithm=apf, pure_pursuit=pure_pursuit
+    )
 
     # Create track
     sim.create_track(track_type="simple")
