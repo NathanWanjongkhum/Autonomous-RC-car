@@ -21,7 +21,7 @@ class Simulation:
     handles visualization and sensor simulation.
     """
 
-    def __init__(self, car: DifferentialDriveCar, grid: OccupancyGrid):
+    def __init__(self, car, grid, explorer_algorithm, pure_pursuit):
         """
         Initialize the simulation
 
