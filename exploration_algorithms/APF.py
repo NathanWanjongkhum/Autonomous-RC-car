@@ -534,28 +534,7 @@ class APF:
 
             return angular_velocity
         else:
-            factor = b / e
-            jacobian_matrix = (
-                np.matrix(
-                    [
-                        [
-                            math.cos(theta) + factor * math.sin(theta),
-                            math.sin(theta) - factor * math.cos(theta),
-                        ],
-                        [
-                            math.cos(theta) - factor * math.sin(theta),
-                            math.sin(theta) + factor * math.cos(theta),
-                        ],
-                    ]
-                )
-                / r
-            )
-
-        # Solve for omegas
-        u = jacobian_matrix @ eta
-
-        # u[0] = v_l, u[1] = v_r
-        return (u[0], u[1])
+            0.0  # Keep current heading
 
 
 ## Example of using the APF class

@@ -417,14 +417,16 @@ class Simulation:
 
 
 def main():
+    # Create Car
     car = DifferentialDriveCar(x=2.0, y=2.0, theta=0.0)
+    # Create Occupancy Grid
     grid = OccupancyGrid(width=10.0, height=10.0, resolution=0.05)
+    # Create exploration algorithm
     apf = APF(car, grid)
-    pure_pursuit = PurePursuit()
-    # pid = PIDController(kp=0.5, ki=0.0, kd=0.0)
-    # pathfinder_algorithm = KKT(grid, pid)
+    # Create pure pursuit controller
+    pure_pursuit = PurePursuit(kp=0.5, ki=0.0, kd=0.0)
 
-    # sim = Simulation(car=car, grid=grid, explorer_algorithm=None, pure_pursuit=pure_pursuit)
+    # Create simulation
     sim = Simulation(
         car=car, grid=grid, explorer_algorithm=apf, pure_pursuit=pure_pursuit
     )
