@@ -2,39 +2,31 @@
 """
 dummy_stereo.py
 
-A simple script to test two cameras in unison by computing and displaying
+A simple script to test two Pi Camera Module 2s in unison by computing and displaying
 an unrectified, raw disparity map without calibration. Captures from:
- - Pi Camera (CSI) via Picamera2
- - USB camera via OpenCV
+ - Pi Camera (CSI0) via Picamera2
+ - Pi Camera (CSI1) via Picamera2
 Press 'q' to quit.
 """
 
-from picamera2 import Picamera2
+from picamera2 import Picamera2, MappedArray
 import cv2
 import numpy as np
 
-
 def main():
-    # Initialize Pi Camera (left)
-    picam2 = Picamera2()
+    # Initialize both Pi Cameras
+    picam_left = Picamera2(0)   # Camera on CSI0
+    picam_right = Picamera2(1)  # Camera on CSI1
+
     # Configure for BGR preview at 640x480
-    preview_config = picam2.create_preview_configuration(
-        main={"format": "BGR888", "size": (640, 480)}
-    )
-    picam2.configure(preview_config)
-    picam2.start()
+    preview_config = {
+        "main": {"format": "BGR888", "size": (640, 480)}
+    }
+    picam_left.configure(picam_left.create_preview_configuration(**preview_config))
+    picam_right.configure(picam_right.create_preview_configuration(**preview_config))
 
-    # Initialize USB Camera (right)
-    cap_right = cv2.VideoCapture(1)
-    if not cap_right.isOpened():
-        print("Error: Cannot open USB camera")
-        return
-
-    # Set USB camera resolution and FPS
-    width, height, fps = 640, 480, 15
-    cap_right.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    cap_right.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    cap_right.set(cv2.CAP_PROP_FPS, fps)
+    picam_left.start()
+    picam_right.start()
 
     # Create StereoBM matcher (raw, uncalibrated)
     num_disparities = 16 * 6  # must be divisible by 16
@@ -48,14 +40,9 @@ def main():
 
     try:
         while True:
-            # Capture left frame (Pi Camera)
-            frame_l = picam2.capture_array()
-
-            # Capture right frame (USB Camera)
-            ret_r, frame_r = cap_right.read()
-            if not ret_r:
-                print("Failed to grab right frame")
-                break
+            # Capture left and right frames
+            frame_l = picam_left.capture_array()
+            frame_r = picam_right.capture_array()
 
             # Convert to grayscale
             gray_l = cv2.cvtColor(frame_l, cv2.COLOR_BGR2GRAY)
@@ -71,8 +58,8 @@ def main():
             disp_display = np.uint8(disp_display)
 
             # Show images
-            cv2.imshow('Left (Pi Camera)', frame_l)
-            cv2.imshow('Right (USB Camera)', frame_r)
+            cv2.imshow('Left (Pi Camera 0)', frame_l)
+            cv2.imshow('Right (Pi Camera 1)', frame_r)
             cv2.imshow('Disparity', disp_display)
 
             # Break on 'q'
@@ -80,11 +67,9 @@ def main():
                 break
     finally:
         # Cleanup
-        cap_right.release()
-        picam2.stop()
+        picam_left.stop()
+        picam_right.stop()
         cv2.destroyAllWindows()
-
 
 if __name__ == '__main__':
     main()
-```
