@@ -580,24 +580,18 @@ def main():
     # For debugging - initialize and show the visualization
     sim.initialize_visualization()
     sim.update_visualization()
-
-    # Method 1: Use block=True to keep the plot open until manually closed
-    plt.show(block=True)
-
-    # Method 2: Alternative approach - add pause to wait for user input
-    # input("Press Enter to continue to the next step...")
+    input("Press Enter to continue to the next step...")
 
     # Test car movement
     # Move the car forward and turn the wheels
     car.set_control_inputs(v=0.0, steering_angle=np.radians(20))
     sim.update_visualization()
-    plt.show(block=True)  # Will pause again until plot is closed
+    input("Press Enter to continue to the next step...")
 
     # Move the car forward with steering
-    car.set_control_inputs(v=0.2, steering_angle=np.radians(20))
     car.update_state(dt=0.5)  # Update for 0.5 seconds
     sim.update_visualization()
-    plt.show(block=True)  # Will pause again until plot is closed
+    input("Press Enter to continue to the next step...")
 
     # Uncomment to run the actual simulation with pauses
     # print("Starting simulation...")
