@@ -3,33 +3,34 @@
 dummy_stereo.py
 
 A simple script to test two Pi Camera Module 2s in unison by computing and displaying
-an unrectified, raw disparity map without calibration. Captures from:
- - Pi Camera (CSI0) via Picamera2
- - Pi Camera (CSI1) via Picamera2
-Press 'q' to quit.
+an unrectified, raw disparity map without calibration. Press 'q' to quit.
 """
 
-from picamera2 import Picamera2, MappedArray
+from picamera2 import Picamera2
 import cv2
 import numpy as np
+import time
 
 def main():
+    # Lower resolution for stability
+    preview_config = {
+        "main": {"format": "BGR888", "size": (320, 240)}
+    }
+
     # Initialize both Pi Cameras
     picam_left = Picamera2(0)   # Camera on CSI0
     picam_right = Picamera2(1)  # Camera on CSI1
 
-    # Configure for BGR preview at 640x480
-    preview_config = {
-        "main": {"format": "BGR888", "size": (640, 480)}
-    }
     picam_left.configure(picam_left.create_preview_configuration(**preview_config))
     picam_right.configure(picam_right.create_preview_configuration(**preview_config))
 
     picam_left.start()
+    time.sleep(0.2)
     picam_right.start()
+    time.sleep(0.2)
 
     # Create StereoBM matcher (raw, uncalibrated)
-    num_disparities = 16 * 6  # must be divisible by 16
+    num_disparities = 16 * 4  # must be divisible by 16
     block_size = 15
     stereo = cv2.StereoBM_create(
         numDisparities=num_disparities,
