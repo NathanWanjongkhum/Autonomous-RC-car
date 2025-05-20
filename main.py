@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
+from PID import AdaptiveControlSimulation, AdaptivePurePursuitController
 from maps.OccupancyGrid import OccupancyGrid
 
 from robots.AckermannSteeringCar import AckermannSteeringCar
@@ -598,5 +599,46 @@ def main():
     # sim.run_simulation(mode="exploration", num_steps=200, pause_interval=20)  # Pause every 20 steps
 
 
+def debug_main():
+    # Create a car with specified parameters
+    car = AckermannSteeringCar(
+        x=2.0,  # Starting x position
+        y=2.0,  # Starting y position
+        theta=0.0,  # Starting orientation (radians)
+        wheelbase=0.25,  # Distance between front and rear axles
+        wheel_radius=0.05,  # Radius of wheels
+        wheel_width=0.04,  # Width of wheels
+        wheel_offset=0.05,  # How far wheels extend beyond car body
+        max_velocity=0.5,  # Maximum velocity (m/s)
+        max_steering_angle=np.radians(35),  # Maximum steering angle (radians)
+        max_angular_velocity=1.0,  # Maximum angular velocity (rad/s)
+        length=0.3,  # Car length (meters)
+        width=0.2,  # Car width (meters)
+    )
+
+    # Create controller
+    controller = AdaptivePurePursuitController(base_lookahead=0.5)
+
+    # Create simulation
+    sim = AdaptiveControlSimulation(car, controller)
+
+    # Generate test path
+    path = sim.generate_test_path("complex")
+
+    # Run simulation
+    results = sim.run_simulation(path)
+
+    # Plot results
+    sim.plot_results(results, path)
+
+    # Show controller performance analysis
+    controller.plot_performance()
+
+    # Run a second simulation with adapted parameters
+    results2 = sim.run_simulation(path)
+    sim.plot_results(results2, path)
+
+
 if __name__ == "__main__":
-    main()
+    # main()
+    debug_main()
