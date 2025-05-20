@@ -617,26 +617,23 @@ def debug_main():
     )
 
     # Create controller
-    controller = AdaptivePurePursuitController(base_lookahead=0.5)
+    controller = AdaptivePurePursuitController(base_lookahead=0.4, mode="exploration")
 
     # Create simulation
     sim = AdaptiveControlSimulation(car, controller)
 
     # Generate test path
-    path = sim.generate_test_path("complex")
+    path = sim.generate_test_path("zigzag")
 
-    # Run simulation
-    results = sim.run_simulation(path)
+    for _ in range(1):
+        # Run simulation
+        results = sim.run_simulation(path)
 
     # Plot results
     sim.plot_results(results, path)
 
     # Show controller performance analysis
     controller.plot_performance()
-
-    # Run a second simulation with adapted parameters
-    results2 = sim.run_simulation(path)
-    sim.plot_results(results2, path)
 
 
 if __name__ == "__main__":
