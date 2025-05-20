@@ -12,9 +12,10 @@ import numpy as np
 import time
 
 def main():
-    # Lower resolution for stability
+    # Lower resolution and framerate for stability
     preview_config = {
-        "main": {"format": "BGR888", "size": (320, 240)}
+        "main": {"format": "BGR888", "size": (320, 240)},
+        "controls": {"FrameDurationLimits": (100000, 100000)}  # 10 FPS (1e6/10)
     }
 
     # Initialize both Pi Cameras
