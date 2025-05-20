@@ -34,8 +34,6 @@ class DifferentialDriveCar:
         )
 
         # Control variables
-        self.v_l = 0  # Left wheel velocity (m/s)
-        self.v_r = 0  # Right wheel velocity (m/s)
         self.v = 0  # Linear velocity (m/s)
         self.omega = 0  # Angular velocity (rad/s)
 
@@ -65,17 +63,6 @@ class DifferentialDriveCar:
         # Normalize theta to (-pi, pi) to prevent growing continuously
         self.theta = np.arctan2(np.sin(self.theta), np.cos(self.theta))
 
-    def set_wheel_velocities(self, v_l, v_r):
-        """
-        Set the wheel velocities independently, respecting maximum limits
-
-        Parameters:
-        v_l: Left wheel velocity (m/s)
-        v_r: Right wheel velocity (m/s)
-        """
-        self.v_l = np.clip(v_l, -self.max_velocity, self.max_velocity)
-        self.v_r = np.clip(v_r, -self.max_velocity, self.max_velocity)
-
     def set_velocities(self, v, omega):
         """
         Set the linear and angular velocities, and calculate corresponding wheel velocities
@@ -88,19 +75,8 @@ class DifferentialDriveCar:
         omega: Desired angular velocity (rad/s)
         """
         # Apply limits to requested velocities
-        v = np.clip(v, -self.max_velocity, self.max_velocity)
-        omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
-
-        # Calculate wheel velocities from robot velocities
-        # For differential drive: v_l = v - (omega * L/2), v_r = v + (omega * L/2)
-        # where L is the distance between wheels
-        self.set_wheel_velocities(
-            v - (omega * self.wheel_distance / 2), v + (omega * self.wheel_distance / 2)
-        )
-
-        # Update the overall velocity and angular velocity
-        self.v = v
-        self.omega = omega
+        self.v = np.clip(v, -self.max_velocity, self.max_velocity)
+        self.omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
 
     def get_corners(self):
         """

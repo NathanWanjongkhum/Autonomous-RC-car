@@ -1,16 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-import math
 
 from maps.OccupancyGrid import OccupancyGrid
-from robots.DifferentialDriveCar import DifferentialDriveCar
+
+from robots.AckermannSteeringCar import AckermannSteeringCar
 
 from exploration_algorithms.APF import APF
 
-from pathfinding_algorithms.PurePursuit import PurePursuit
-from pathfinding_algorithms.WallFollower import WallFollower
-from pathfinding_algorithms.AStar import AStarPlanner
 
 class Simulation:
     """
@@ -20,21 +17,34 @@ class Simulation:
     handles visualization and sensor simulation.
     """
 
-    def __init__(self, car, grid, explorer_algorithm, pure_pursuit):
+    def __init__(self, car=None, grid=None, width=10.0, height=10.0, resolution=0.05):
         """
         Initialize the simulation
 
         Parameters:
-        width, height: Size of the environment in meters
-        resolution: Grid resolution in meters
+        car: An instance of AckermannSteeringCar (will create a default one if None)
+        grid: An instance of OccupancyGrid (will create a default one if None)
+        width, height: Size of the environment in meters (used if grid is None)
+        resolution: Grid resolution in meters (used if grid is None)
         """
-        self.car = car
-        self.grid = grid
-        self.explorer_algorithm = explorer_algorithm
-        self.pure_pursuit = pure_pursuit
+        # Create or use the provided occupancy grid
+        if grid is None:
+            self.grid = OccupancyGrid(width, height, resolution)
+        else:
+            self.grid = grid
+
+        # Create or use the provided car
+        if car is None:
+            self.car = AckermannSteeringCar(x=2.0, y=2.0, theta=0.0)
+        else:
+            self.car = car
+
+        # Create the APF controller for exploration
+        self.explorer = APF(self.car, self.grid)
 
         # Simulation parameters
         self.dt = 0.1  # Time step in seconds
+        self.max_steps = 1000  # Maximum simulation steps
         self.current_step = 0
 
         # Path and mapping
@@ -45,6 +55,8 @@ class Simulation:
         self.fig = None
         self.ax = None
         self.car_patch = None
+        self.wheel_patches = []
+        self.steering_lines = []
 
     def create_track(self, track_type="simple"):
         """
@@ -54,63 +66,95 @@ class Simulation:
         track_type: Type of track to create ('simple', 'oval', 'complex')
         """
         # Clear the binary grid before creating track
-        self.grid.binary_grid = np.zeros((self.grid.grid_height, self.grid.grid_width), dtype=bool)
+        self.grid.binary_grid = np.zeros(
+            (self.grid.grid_height, self.grid.grid_width), dtype=bool
+        )
         # Make walls thicker for better detection
         wall_thickness = 1  # Cells
         wall_offset = self.grid.resolution / wall_thickness
-    
+
         if track_type == "simple":
             # Set parameters for inner track
-            inner_margin_percent = 0.1  # 30% margin from the outer walls
+            inner_margin_percent = 0.1  # 10% margin from the outer walls
             inner_width = self.grid.width * (1 - 2 * inner_margin_percent)
             inner_height = self.grid.height * (1 - 2 * inner_margin_percent)
             inner_start_x = self.grid.width * inner_margin_percent
             inner_start_y = self.grid.height * inner_margin_percent
-            
-            # Outer walls - use your existing code
+
+            # Outer walls
             # Bottom wall
             for x in np.arange(0.0, self.grid.width, self.grid.resolution):
                 for y in np.arange(-wall_offset, wall_offset, self.grid.resolution):
                     self.grid.update_cell(x, y, True)
-                    
+
             # Top wall
             for x in np.arange(0.0, self.grid.width, self.grid.resolution):
-                for y in np.arange(self.grid.height-wall_offset, self.grid.height+wall_offset, self.grid.resolution):
+                for y in np.arange(
+                    self.grid.height - wall_offset,
+                    self.grid.height + wall_offset,
+                    self.grid.resolution,
+                ):
                     self.grid.update_cell(x, y, True)
-                    
+
             # Left wall
             for y in np.arange(0.0, self.grid.height, self.grid.resolution):
                 for x in np.arange(-wall_offset, wall_offset, self.grid.resolution):
                     self.grid.update_cell(x, y, True)
-                    
+
             # Right wall
             for y in np.arange(0.0, self.grid.height, self.grid.resolution):
-                for x in np.arange(self.grid.width-wall_offset, self.grid.width+wall_offset, self.grid.resolution):
+                for x in np.arange(
+                    self.grid.width - wall_offset,
+                    self.grid.width + wall_offset,
+                    self.grid.resolution,
+                ):
                     self.grid.update_cell(x, y, True)
-            
+
             # Inner walls
             # Bottom inner wall
-            for x in np.arange(inner_start_x, inner_start_x + inner_width, self.grid.resolution):
-                for y in np.arange(inner_start_y - wall_offset, inner_start_y + wall_offset, self.grid.resolution):
+            for x in np.arange(
+                inner_start_x, inner_start_x + inner_width, self.grid.resolution
+            ):
+                for y in np.arange(
+                    inner_start_y - wall_offset,
+                    inner_start_y + wall_offset,
+                    self.grid.resolution,
+                ):
                     self.grid.update_cell(x, y, True)
-                    
+
             # Top inner wall
-            for x in np.arange(inner_start_x, inner_start_x + inner_width, self.grid.resolution):
-                for y in np.arange(inner_start_y + inner_height - wall_offset, 
-                                inner_start_y + inner_height + wall_offset, self.grid.resolution):
+            for x in np.arange(
+                inner_start_x, inner_start_x + inner_width, self.grid.resolution
+            ):
+                for y in np.arange(
+                    inner_start_y + inner_height - wall_offset,
+                    inner_start_y + inner_height + wall_offset,
+                    self.grid.resolution,
+                ):
                     self.grid.update_cell(x, y, True)
-                    
+
             # Left inner wall
-            for y in np.arange(inner_start_y, inner_start_y + inner_height, self.grid.resolution):
-                for x in np.arange(inner_start_x - wall_offset, inner_start_x + wall_offset, self.grid.resolution):
+            for y in np.arange(
+                inner_start_y, inner_start_y + inner_height, self.grid.resolution
+            ):
+                for x in np.arange(
+                    inner_start_x - wall_offset,
+                    inner_start_x + wall_offset,
+                    self.grid.resolution,
+                ):
                     self.grid.update_cell(x, y, True)
-                    
+
             # Right inner wall
-            for y in np.arange(inner_start_y, inner_start_y + inner_height, self.grid.resolution):
-                for x in np.arange(inner_start_x + inner_width - wall_offset, 
-                                inner_start_x + inner_width + wall_offset, self.grid.resolution):
+            for y in np.arange(
+                inner_start_y, inner_start_y + inner_height, self.grid.resolution
+            ):
+                for x in np.arange(
+                    inner_start_x + inner_width - wall_offset,
+                    inner_start_x + inner_width + wall_offset,
+                    self.grid.resolution,
+                ):
                     self.grid.update_cell(x, y, True)
-            
+
         elif track_type == "oval":
             # Oval track
             center_x, center_y = 5.0, 5.0
@@ -158,8 +202,7 @@ class Simulation:
         # Simulate lidar-like sensing
         # Generate angles and ranges
         num_rays = 20
-        # angles = 180
-        angles = np.linspace(0, 2 * np.pi, num_rays, endpoint=False)
+        angles = np.linspace(-np.pi / 2, np.pi / 2, num_rays)  # Front-facing 180° arc
         max_range = 2.0
 
         # Cast rays and detect obstacles
@@ -167,15 +210,16 @@ class Simulation:
         for angle in angles:
             # Cast ray until hitting an obstacle
             for d in np.arange(0.1, max_range, self.grid.resolution):
+                # Calculate ray endpoint in world coordinates
                 ray_x = self.car.x + d * np.cos(self.car.theta + angle)
                 ray_y = self.car.y + d * np.sin(self.car.theta + angle)
 
                 # Check if ray is outside the environment
                 if (
                     ray_x < 0
-                    or ray_x >= self.grid.grid_width
+                    or ray_x >= self.grid.width
                     or ray_y < 0
-                    or ray_y >= self.grid.grid_height
+                    or ray_y >= self.grid.height
                 ):
                     ranges.append(d)
                     break
@@ -205,59 +249,27 @@ class Simulation:
         # Record visited position
         self.visited_positions.append((self.car.x, self.car.y))
 
-    def plan_optimal_path(self, start_x, start_y, goal_x, goal_y):
+    def phase1_exploration(self):
         """
-        Plan an optimal path from start to goal
-
-        This method would be used after Phase 1 exploration to plan
-        the optimal path for Phase 2.
-
-        Parameters:
-        start_x, start_y: Start position
-        goal_x, goal_y: Goal position
-
-        Returns:
-        path: List of (x, y) points defining the path or None if no path found
+        Perform Phase 1 exploration of the environment using APF controller
         """
-        # Process the map to clean up noise
-        self.grid.process_map()
+        # Get control inputs from APF controller
+        velocity, steering_angle = self.explorer.compute_steering(self.dt)
 
-        # Plan path using A*
-        path = self.path_planner.plan_path(start_x, start_y, goal_x, goal_y)
-
-        if path:
-            # Set the path for pure pursuit
-            self.pure_pursuit.set_path(path)
-            self.path = path
-            return path
-
-        return None
-
-    def phase2_execution(self):
-        """
-        Perform Phase 2 execution of the planned path
-
-        This method controls the car to follow the planned path
-        using the pure pursuit controller.
-        """
-        # Check if we have a path
-        if not self.path:
-            print("No path to follow!")
-            return
-
-        # Get steering command from pure pursuit
-        angular_velocity = self.pure_pursuit.compute_steering(
-            self.car.x, self.car.y, self.car.theta, 0.5
-        )
-
-        # Set car velocities (faster than exploration)
-        self.car.set_velocities(0.5, angular_velocity)
+        # Set car control inputs
+        self.car.set_control_inputs(velocity, steering_angle)
 
         # Update car state
         self.car.update_state(self.dt)
 
+        # Sense environment and update map
+        self.sense_environment()
+
         # Increment step counter
         self.current_step += 1
+
+        # Return the car's action for logging or analysis
+        return velocity, steering_angle
 
     def initialize_visualization(self):
         """
@@ -267,13 +279,93 @@ class Simulation:
         self.ax.set_xlim(0, self.grid.width)
         self.ax.set_ylim(0, self.grid.height)
         self.ax.set_aspect("equal")
-        self.ax.set_title("Car Navigation Simulation")
+        self.ax.set_title("Car Navigation Simulation (Ackermann Steering)")
 
         # Create car patch
         corners = self.car.get_corners()
         xy = np.array(corners + [corners[0]])  # Close the polygon
-        self.car_patch = patches.Polygon(xy, closed=True, color="blue", fill=True)
+        self.car_patch = patches.Polygon(xy, closed=True, color="blue", fill=False)
         self.ax.add_patch(self.car_patch)
+
+        # Create wheel visualizations
+        self.wheel_patches = []
+
+        # Get wheel positions and steering angles
+        steering_coords = self.car.visualize_steering()
+        self.steering_lines = []
+
+        # Front wheels (with steering)
+        for x1, y1, x2, y2 in steering_coords:
+            # Draw a line representing the wheel direction
+            (line,) = self.ax.plot([x1, x2], [y1, y2], "r-", linewidth=2)
+            self.steering_lines.append(line)
+
+            # Draw the wheel itself as a small rectangle
+            wheel_length = self.car.wheel_radius * 2
+            wheel_width = wheel_length / 2
+
+            # Calculate wheel angle
+            wheel_angle = np.arctan2(y2 - y1, x2 - x1)
+
+            # Create wheel patch
+            wheel_patch = patches.Rectangle(
+                (
+                    x1 - self.car.wheel_width / 2,
+                    y1 - self.car.wheel_width / 2,
+                ),  # xy position (centered on wheel)
+                self.car.wheel_radius * 2,  # width
+                self.car.wheel_width,  # height
+                angle=np.degrees(wheel_angle),  # angle in degrees
+                color="black",
+                fill=True,
+            )
+            self.ax.add_patch(wheel_patch)
+            self.wheel_patches.append(wheel_patch)
+
+        # Rear wheels (fixed orientation)
+        cos_theta = np.cos(self.car.theta)
+        sin_theta = np.sin(self.car.theta)
+
+        # Rear axle center
+        rear_center_x = self.car.x - (self.car.length / 2) * cos_theta
+        rear_center_y = self.car.y - (self.car.length / 2) * sin_theta
+
+        # Calculate rear wheel positions (left and right)
+        rear_wheel_positions = [
+            # Left rear wheel - include the wheel offset
+            (
+                rear_center_x
+                + (self.car.width / 2 + self.car.wheel_offset) * -sin_theta,
+                rear_center_y
+                + (self.car.width / 2 + self.car.wheel_offset) * cos_theta,
+            ),
+            # Right rear wheel - include the wheel offset
+            (
+                rear_center_x
+                + (self.car.width / 2 + self.car.wheel_offset) * sin_theta,
+                rear_center_y
+                + (self.car.width / 2 + self.car.wheel_offset) * -cos_theta,
+            ),
+        ]
+
+        # Draw rear wheels (parallel to car orientation)
+        wheel_length = self.car.wheel_radius * 2
+        wheel_width = wheel_length / 2
+
+        for x, y in rear_wheel_positions:
+            wheel_patch = patches.Rectangle(
+                (
+                    x - self.car.wheel_width / 2,
+                    y - self.car.wheel_width / 2,
+                ),  # xy position
+                self.car.wheel_radius * 2,  # width
+                self.car.wheel_width,  # height
+                angle=np.degrees(self.car.theta),  # angle in degrees
+                color="black",
+                fill=True,
+            )
+            self.ax.add_patch(wheel_patch)
+            self.wheel_patches.append(wheel_patch)
 
         # Create occupancy grid visualization
         grid_img = np.zeros((self.grid.grid_height, self.grid.grid_width, 4))
@@ -304,6 +396,78 @@ class Simulation:
         xy = np.array(corners + [corners[0]])  # Close the polygon
         self.car_patch.set_xy(xy)
 
+        # Remove old wheel patches
+        for patch in self.wheel_patches:
+            patch.remove()
+        self.wheel_patches = []
+
+        # Update steering lines
+        steering_coords = self.car.visualize_steering()
+        for i, (x1, y1, x2, y2) in enumerate(steering_coords):
+            self.steering_lines[i].set_data([x1, x2], [y1, y2])
+
+        # Re-create front wheel patches with updated positions and angles
+        for x1, y1, x2, y2 in steering_coords:
+            # Calculate wheel angle
+            wheel_angle = np.arctan2(y2 - y1, x2 - x1)
+
+            # Create wheel patch
+            wheel_length = self.car.wheel_radius * 2
+            wheel_width = wheel_length / 2
+
+            wheel_patch = patches.Rectangle(
+                (x1 - wheel_width / 2, y1 - wheel_width / 2),
+                wheel_length,
+                wheel_width,
+                angle=np.degrees(wheel_angle),
+                color="black",
+                fill=True,
+            )
+            self.ax.add_patch(wheel_patch)
+            self.wheel_patches.append(wheel_patch)
+
+        # Update rear wheel positions and patches
+        cos_theta = np.cos(self.car.theta)
+        sin_theta = np.sin(self.car.theta)
+
+        # Rear axle center
+        rear_center_x = self.car.x - (self.car.length / 2) * cos_theta
+        rear_center_y = self.car.y - (self.car.length / 2) * sin_theta
+
+        # Calculate rear wheel positions
+        rear_wheel_positions = [
+            # Left rear wheel - include the wheel offset
+            (
+                rear_center_x
+                + (self.car.width / 2 + self.car.wheel_offset) * -sin_theta,
+                rear_center_y
+                + (self.car.width / 2 + self.car.wheel_offset) * cos_theta,
+            ),
+            # Right rear wheel - include the wheel offset
+            (
+                rear_center_x
+                + (self.car.width / 2 + self.car.wheel_offset) * sin_theta,
+                rear_center_y
+                + (self.car.width / 2 + self.car.wheel_offset) * -cos_theta,
+            ),
+        ]
+
+        # Draw rear wheels
+        wheel_length = self.car.wheel_radius * 2
+        wheel_width = wheel_length / 2
+
+        for x, y in rear_wheel_positions:
+            wheel_patch = patches.Rectangle(
+                (x - wheel_width / 2, y - wheel_width / 2),
+                wheel_length,
+                wheel_width,
+                angle=np.degrees(self.car.theta),
+                color="black",
+                fill=True,
+            )
+            self.ax.add_patch(wheel_patch)
+            self.wheel_patches.append(wheel_patch)
+
         # Update occupancy grid visualization
         grid_img = np.zeros((self.grid.grid_height, self.grid.grid_width, 4))
 
@@ -320,15 +484,6 @@ class Simulation:
 
         self.ax.images[0].set_data(grid_img)
 
-        # Plot path
-        if self.path:
-            path_x = [p[0] for p in self.path]
-            path_y = [p[1] for p in self.path]
-            if not hasattr(self, "path_line"):
-                (self.path_line,) = self.ax.plot(path_x, path_y, "g-", linewidth=2)
-            else:
-                self.path_line.set_data(path_x, path_y)
-
         # Plot visited positions
         visited_x = [p[0] for p in self.visited_positions]
         visited_y = [p[1] for p in self.visited_positions]
@@ -342,87 +497,111 @@ class Simulation:
         self.fig.canvas.draw()
         plt.pause(0.01)
 
-    def run_exploration(self, max_steps=250): 
+    def run_simulation(self, mode="exploration", num_steps=None, pause_interval=None):
         """
-        Run the exploration phase of the simulation
+        Run the simulation
 
         Parameters:
-        max_steps: Maximum number of steps to run (default: 250)
+        mode: 'exploration' for Phase 1
+        num_steps: Number of steps to run, or None for max_steps
+        pause_interval: If specified, pause after this many steps and wait for user input
         """
-        if self.explorer_algorithm is None:
-            print("No exploration algorithm specified. Skipping...")
-            return
-        
+        if num_steps is None:
+            num_steps = self.max_steps
+
         # Initialize visualization
         self.initialize_visualization()
 
-        print(f"Running simulation for {max_steps} steps...")
+        # Reset step counter
+        self.current_step = 0
+
+        print(f"Running simulation for {num_steps} steps...")
         # Run simulation loop
-        for step in range(max_steps):
-            # Compute steering command
-            av = self.explorer_algorithm.compute_steering()
-            
-            self.car.set_velocities(0.2, av)
+        for step in range(num_steps):
+            print(f"Step {step}")
+            if mode == "exploration":
+                velocity, steering_angle = self.phase1_exploration()
+                print(
+                    f"  Velocity: {velocity:.2f}, Steering: {np.degrees(steering_angle):.2f}°"
+                )
 
-            # Update car state
-            self.car.update_state(self.dt)
-
-            # Sense environment and update map
-            self.sense_environment()
-        
-            # Update visualization every few steps
-            if step % 5 == 0:
+            # Update visualization every few steps or at pause intervals
+            if step % 5 == 0 or (pause_interval and step % pause_interval == 0):
                 self.update_visualization()
 
+                # If we have a pause interval and we're at a pause step, wait for user input
+                if pause_interval and step % pause_interval == 0:
+                    plt.draw()
+                    input(f"Step {step} - Press Enter to continue...")
+                else:
+                    plt.pause(0.01)  # Small pause for visualization
+
+            # Check termination conditions
+            if self.current_step >= self.max_steps:
+                break
+
         print("Simulation complete!")
-        self.explorer_algorithm.save_plots()
 
         # Final update
         self.update_visualization()
         print("Displaying final state. Close the plot window to continue.")
-        plt.show()
+        plt.show(block=True)  # Wait until user closes the window
 
 
 def main():
-    car = DifferentialDriveCar(x=2.0, y=2.0, theta=0.0)
-    grid = OccupancyGrid(width=10.0, height=10.0, resolution=0.05)
-    apf = APF(car, grid)
-    pure_pursuit = PurePursuit()
-    # pid = PIDController(kp=0.5, ki=0.0, kd=0.0)
-    # pathfinder_algorithm = KKT(grid, pid)
-    
-    # sim = Simulation(car=car, grid=grid, explorer_algorithm=None, pure_pursuit=pure_pursuit)
-    sim = Simulation(car=car, grid=grid, explorer_algorithm=apf, pure_pursuit=pure_pursuit)
+    """
+    Main function to run the simulation
+    """
+    # Create a car with specified parameters
+    car = AckermannSteeringCar(
+        x=2.0,  # Starting x position
+        y=2.0,  # Starting y position
+        theta=0.0,  # Starting orientation (radians)
+        wheelbase=0.25,  # Distance between front and rear axles
+        wheel_radius=0.05,  # Radius of wheels
+        wheel_width=0.04,  # Width of wheels
+        wheel_offset=0.05,  # How far wheels extend beyond car body
+        max_velocity=0.5,  # Maximum velocity (m/s)
+        max_steering_angle=np.radians(35),  # Maximum steering angle (radians)
+        max_angular_velocity=1.0,  # Maximum angular velocity (rad/s)
+        length=0.3,  # Car length (meters)
+        width=0.2,  # Car width (meters)
+    )
 
-    # Create track
+    # Create an occupancy grid
+    grid = OccupancyGrid(width=4.0, height=4.0, resolution=0.05)
+
+    # Create the simulation with our car and grid
+    sim = Simulation(car=car, grid=grid)
+
+    # Create a simple track
     sim.create_track(track_type="simple")
 
-    #### Debugging ####
-    # sim.initialize_visualization()
-    # sim.update_visualization()
-    # plt.show()
+    # For debugging - initialize and show the visualization
+    sim.initialize_visualization()
+    sim.update_visualization()
 
-    # Phase 1: Exploration
-    print("Running Phase 1: Exploration...")
-    sim.run_exploration(max_steps=250)
+    # Method 1: Use block=True to keep the plot open until manually closed
+    plt.show(block=True)
 
-    # # Process map and plan optimal path
-    # start_x, start_y = sim.car.x, sim.car.y
-    # goal_x, goal_y = 1.5, 1.5
+    # Method 2: Alternative approach - add pause to wait for user input
+    # input("Press Enter to continue to the next step...")
 
-    # print("Planning optimal path...")
-    # path = sim.plan_optimal_path(start_x, start_y, goal_x, goal_y)
+    # Test car movement
+    # Move the car forward and turn the wheels
+    car.set_control_inputs(v=0.0, steering_angle=np.radians(20))
+    sim.update_visualization()
+    plt.show(block=True)  # Will pause again until plot is closed
 
-    # if path:
-    #     print("Optimal path found!")
+    # Move the car forward with steering
+    car.set_control_inputs(v=0.2, steering_angle=np.radians(20))
+    car.update_state(dt=0.5)  # Update for 0.5 seconds
+    sim.update_visualization()
+    plt.show(block=True)  # Will pause again until plot is closed
 
-    #     # Phase 2: Execution
-    #     print("Running Phase 2: Execution...")
-    #     # Reset car position for demonstration
-    #     sim.car.x, sim.car.y, sim.car.theta = start_x, start_y, 0.0
-    #     sim.run_simulation(mode="execution", num_steps=200)
-    # else:
-    #     print("Failed to find a path!")
+    # Uncomment to run the actual simulation with pauses
+    # print("Starting simulation...")
+    # sim.run_simulation(mode="exploration", num_steps=200, pause_interval=20)  # Pause every 20 steps
 
 
 if __name__ == "__main__":
