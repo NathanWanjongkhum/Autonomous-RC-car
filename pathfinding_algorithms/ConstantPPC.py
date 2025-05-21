@@ -14,13 +14,13 @@ class ConstantPurePursuitController:
 
     def __init__(
         self,
-        constant_angular_velocity=0.5,
+        angular_velocity=0.5,
         base_lookahead=0.5,
         reference_point="rear",
         use_feedforward=True,
     ):
         # Controller parameters
-        self.constant_angular_velocity = constant_angular_velocity
+        self.angular_velocity = angular_velocity
         self.base_lookahead = base_lookahead
         self.min_lookahead = 0.2
         self.max_lookahead = 1.5
@@ -186,7 +186,7 @@ class ConstantPurePursuitController:
             linear_velocity = 0.5  # Default velocity for straight segments
         else:
             # Compute linear velocity for constant angular velocity
-            linear_velocity = self.constant_angular_velocity / abs(curvature)
+            linear_velocity = self.angular_velocity / abs(curvature)
 
             # Cap velocity to reasonable limits
             linear_velocity = min(linear_velocity, 0.5)  # Max velocity
@@ -223,9 +223,7 @@ class ConstantPurePursuitController:
         # For Ackermann steering with constant angular velocity:
         # θ̇ = v * tan(φ) / L
         # Solving for φ: φ = arctan(θ̇ * L / v)
-        base_steering = np.arctan2(
-            self.constant_angular_velocity * wheelbase, linear_velocity
-        )
+        base_steering = np.arctan2(self.angular_velocity * wheelbase, linear_velocity)
 
         # Apply sign from curvature direction
         base_steering *= np.sign(curvature)

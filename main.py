@@ -837,7 +837,7 @@ def debug_main():
 
     # Create controller
     controller = ConstantPurePursuitController(
-        constant_angular_velocity=0.5,
+        angular_velocity=0.5,
         base_lookahead=0.4,
         reference_point="rear",
         use_feedforward=True,
