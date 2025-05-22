@@ -593,8 +593,6 @@ class PurePursuitSimulation:
         for step in range(num_steps):
             self.run_simulation_step()
 
-            # Optional: pause every N steps
-            if step % 1 == 0:
-                plt.pause(0.1)
+            plt.pause(0.0001)
 
         plt.show()

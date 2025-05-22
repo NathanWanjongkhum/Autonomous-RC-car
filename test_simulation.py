@@ -37,7 +37,7 @@ def main():
     simulation.plot_results(results, show_metrics=True)
 
     print(f"Simulation completed: {results['completion_reason']}")
-    df = pd.DataFrame(results["metrics"])
+    df = pd.DataFrame([results["metrics"]])
     print(f"Performance metrics: {df}")
 
 
