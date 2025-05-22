@@ -79,7 +79,7 @@ def run_simulation(
     )
 
     # Create the controller
-    controller = ConstantPurePursuitController(angular_velocity=0.5, base_lookahead=0.5)
+    controller = ConstantPurePursuitController(angular_velocity=0.5, base_lookahead=1)
 
     # Create simulation configuration
     config = SimulationConfig(
@@ -109,13 +109,13 @@ if __name__ == "__main__":
     print("Running simulation with visualization...")
     results_with_visualization = run_simulation(path, visualize=True)
 
-    # Run the simulation without visualization
-    print("Running simulation without visualization...")
-    results_without_visualization = run_simulation(path, visualize=False)
-
     # Print performance metrics
     df = pd.DataFrame([results_with_visualization["metrics"]])
     print(f"Performance metrics: {df}")
+
+    # Run the simulation without visualization
+    print("Running simulation without visualization...")
+    results_without_visualization = run_simulation(path, visualize=False)
 
     df = pd.DataFrame([results_without_visualization["metrics"]])
     print(f"Performance metrics: {df}")
