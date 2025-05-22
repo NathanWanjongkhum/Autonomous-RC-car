@@ -1,8 +1,11 @@
 import numpy as np
+
+import matplotlib
+
+# matplotlib.use("Agg")  # Use a non-interactive backend for saving figures
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 import time
-from typing import List, Tuple, Dict, Optional, Any, Union
+from typing import List, Tuple, Dict, Optional, Any
 
 from DrawableElements import *
 
@@ -459,9 +462,14 @@ class PurePursuitSimulation:
         Returns:
         dict: Simulation results
         """
+
         # Set path if provided
         if path:
+            path = path.copy()
             self.set_reference_path(path)
+
+            self.car.x = path[0][0]
+            self.car.y = path[0][1]
 
         # Use provided num_steps if specified, otherwise use config
         if num_steps is not None:
@@ -469,11 +477,12 @@ class PurePursuitSimulation:
         else:
             max_steps = self.config.max_steps
 
-        # Reset simulation
-        self.reset_simulation()
+        if self.config.visualize:
+            # Reset simulation
+            self.reset_simulation()
 
-        # Initialize visualization
-        self.initialize_visualization()
+            # Initialize visualization
+            self.initialize_visualization()
 
         # Run simulation steps until completion or max steps
         for _ in range(max_steps):
@@ -482,13 +491,12 @@ class PurePursuitSimulation:
 
             # Optional pause for visualization
             if self.viz and self.config.real_time_factor > 0:
-                pause_time = max(
-                    0.001, self.config.dt / self.config.real_time_factor - 0.01
-                )
-                plt.pause(pause_time)
+                # Minimum time
+                plt.pause(0.01)
 
             # Stop if simulation is complete
             if completed:
+                print("Successful Completion")
                 break
 
         # Return simulation results
@@ -515,69 +523,6 @@ class PurePursuitSimulation:
         }
 
         return results
-
-    def generate_test_path(self, path_type: str = "oval") -> List[Tuple[float, float]]:
-        """
-        Generate a test path for the controller
-
-        Parameters:
-        path_type: Type of path to generate (oval, figure8, complex, zigzag)
-
-        Returns:
-        list: List of (x, y) points defining the path
-        """
-        if path_type == "oval":
-            t = np.linspace(0, 2 * np.pi, 100)
-            x = 5 + 3 * np.cos(t)
-            y = 5 + 2 * np.sin(t)
-            path = list(zip(x, y))
-
-        elif path_type == "figure8":
-            t = np.linspace(0, 2 * np.pi, 100)
-            x = 5 + 3 * np.sin(t)
-            y = 5 + 2 * np.sin(2 * t)
-            path = list(zip(x, y))
-
-        elif path_type == "complex":
-            path = []
-            # Straight segment
-            for i in range(20):
-                path.append((i * 0.2, 5.0))
-
-            # Curve
-            for i in range(30):
-                angle = i * np.pi / 30
-                path.append((4.0 + 2.0 * np.cos(angle), 5.0 + 2.0 * np.sin(angle)))
-
-            # Another straight segment
-            for i in range(20):
-                path.append((4.0 - i * 0.2, 7.0))
-        elif path_type == "zigzag":
-            # Zigzag path that moves across the environment
-            start_x, start_y = 1.0, 1.0
-            path = [(start_x, start_y)]
-
-            # Create a zigzag pattern
-            for i in range(10):
-                # Forward segment
-                next_x = start_x + (i + 1) * 0.8
-                next_y = start_y + (i % 2) * 1.5  # Alternate up and down
-
-                # Add points along the segment
-                last_x, last_y = path[-1]
-                steps = 15
-                for j in range(1, steps + 1):
-                    x = last_x + (next_x - last_x) * j / steps
-                    y = last_y + (next_y - last_y) * j / steps
-                    path.append((x, y))
-        else:
-            # Default straight line
-            path = []
-            for i in range(20):
-                path.append((i * 0.2, 5.0))
-
-        # Remove last few points to ensure we have a clear goal
-        return path[:-10]
 
     def plot_results(
         self,
