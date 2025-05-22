@@ -570,9 +570,6 @@ class PurePursuitSimulation:
 
     def run_simulation_step(self):
         """Run one simulation step"""
-        # Your simulation logic here
-        # ...
-
         # Update trajectory
         self.update_trajectory(self.car.x, self.car.y)
 

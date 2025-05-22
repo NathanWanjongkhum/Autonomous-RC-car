@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from PurePursuitSimulation import PurePursuitSimulation, SimulationConfig
 from robots.AckermannSteeringCar import AckermannSteeringCar
 from pathfinding_algorithms.ConstantPPC import ConstantPurePursuitController
+import pandas as pd
 
 
 def main():
@@ -35,11 +36,9 @@ def main():
     # Plot the results with metrics
     simulation.plot_results(results, show_metrics=True)
 
-    # Export data for further analysis (optional)
-    # simulation.export_data("simulation_results.csv")
-
     print(f"Simulation completed: {results['completion_reason']}")
-    print(f"Performance metrics: {results['metrics']}")
+    df = pd.DataFrame(results["metrics"])
+    print(f"Performance metrics: {df}")
 
 
 if __name__ == "__main__":

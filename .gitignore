@@ -1,1 +1,4 @@
 *.pyc
+simulation_results/
+.clinerules/
+__pycache__/
