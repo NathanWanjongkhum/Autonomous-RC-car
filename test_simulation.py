@@ -94,7 +94,7 @@ def run_simulation(
         angular_velocity=0.5,
         hysteresis_threshold=10.0,
         dead_zone_threshold=5.0,
-        base_lookahead=1,
+        base_lookahead=0.5,
         max_integral_degrees=10.0,
         feedforward_lookahead_points=5,
     )
@@ -128,17 +128,17 @@ if __name__ == "__main__":
     results_with_visualization: SimulationResults = run_simulation(path, visualize=True)
 
     # Print performance metrics
-    df: pd.DataFrame = pd.DataFrame([results_with_visualization["metrics"]])
-    print(f"Performance metrics: {df}")
+    # df: pd.DataFrame = pd.DataFrame([results_with_visualization["metrics"]])
+    # print(f"Performance metrics: {df}")
 
     # Run the simulation without visualization
-    print("Running simulation without visualization...")
-    results_without_visualization: SimulationResults = run_simulation(
-        path, visualize=False
-    )
+    # print("Running simulation without visualization...")
+    # results_without_visualization: SimulationResults = run_simulation(
+    #     path, visualize=False
+    # )
 
-    df = pd.DataFrame([results_without_visualization["metrics"]])
-    print(f"Performance metrics: {df}")
+    # df = pd.DataFrame([results_without_visualization["metrics"]])
+    # print(f"Performance metrics: {df}")
 
     # Compare results
     # print("Comparing results...")

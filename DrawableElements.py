@@ -408,6 +408,8 @@ class VisualizationManager:
         self.figsize = figsize
 
         # Create figure and axis
+        # Set matplotlib style to dark background
+        plt.style.use("dark_background")
         self.fig, self.ax = plt.subplots(figsize=figsize)
 
         # Dictionary to store all drawable elements
@@ -422,12 +424,12 @@ class VisualizationManager:
     def _initialize_default_elements(self):
         """Initialize default drawable elements"""
         # Car elements
-        self.elements["car_body"] = CarBodyDrawer(self.car, color="white")
+        self.elements["car_body"] = CarBodyDrawer(self.car, color="cyan")
         self.elements["wheels"] = WheelDrawer(
             self.car,
-            color="white",
+            color="lightgray",
         )
-        self.elements["steering_lines"] = SteeringLinesDrawer(self.car)
+        self.elements["steering_lines"] = SteeringLinesDrawer(self.car, color="magenta")
 
         # Environment elements
         if self.grid:
@@ -435,17 +437,17 @@ class VisualizationManager:
 
         # Path and trajectory elements
         self.elements["reference_path"] = PathDrawer(
-            color="blue", linestyle="--", label="Reference Path"
+            color="lime", linestyle="--", label="Reference Path"
         )
         self.elements["trajectory"] = TrajectoryDrawer(
-            color="yellow", marker=".", markersize=1, label="Trajectory"
+            color="orange", marker=".", markersize=1, label="Trajectory"
         )
 
         # Markers
         self.elements["start_marker"] = MarkerDrawer(
             self.car.x,
             self.car.y,
-            color="green",
+            color="white",
             marker="o",
             markersize=8,
             label="Start",
