@@ -4,3 +4,4 @@ simulation_results/
 __pycache__/
 TODO.txt
 apf_performance_simple.png
+.venv/*

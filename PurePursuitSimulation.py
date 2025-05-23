@@ -476,6 +476,11 @@ class PurePursuitSimulation:
             self.car.x = path[0][0]
             self.car.y = path[0][1]
 
+            if self.viz:
+                self.viz.get_element("start_marker").set_position(
+                    self.car.x, self.car.y
+                )
+
         # Use provided num_steps if specified, otherwise use config
         if num_steps is not None:
             max_steps = num_steps
@@ -494,10 +499,10 @@ class PurePursuitSimulation:
             # Run a single step
             completed = self.run_simulation_step()
 
+            # Minimum time
+            plt.pause(0.01)
             # Optional pause for visualization
-            if self.viz and self.config.real_time_factor > 0:
-                # Minimum time
-                plt.pause(0.01)
+            # if self.viz and self.config.real_time_factor > 0:
 
             # Stop if simulation is complete
             if completed:
