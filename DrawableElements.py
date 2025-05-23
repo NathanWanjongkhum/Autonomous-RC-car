@@ -493,7 +493,6 @@ class VisualizationManager:
                 element.update(self.ax)
 
         self.fig.canvas.draw()
-        plt.pause(0.01)
 
     def show_legend(self):
         """Show legend for labeled elements"""
@@ -502,97 +501,3 @@ class VisualizationManager:
     def save_figure(self, filename):
         """Save the current figure"""
         self.fig.savefig(filename, dpi=300, bbox_inches="tight")
-
-
-# Example usage with the refactored system
-class PurePursuitSimulation:
-    """
-    Refactored simulation with modular visualization
-    """
-
-    def __init__(self, car, controller, grid=None):
-        self.car = car
-        self.controller = controller
-        self.grid = grid
-        self.dt = 0.1
-        self.max_steps = 1000
-
-        # Create visualization manager
-        self.viz = VisualizationManager(car, grid)
-
-        # Customize which elements to show
-        self.setup_visualization()
-
-    def setup_visualization(self):
-        """Configure which elements to display"""
-        # Enable/disable elements as needed
-        self.viz.enable_element("car_body", True)
-        self.viz.enable_element("wheels", True)
-        self.viz.enable_element("steering_lines", True)
-
-        if self.grid:
-            self.viz.enable_element("occupancy_grid", True)
-
-        # Add custom elements
-        self.viz.add_element(
-            "goal_marker",
-            MarkerDrawer(0, 0, color="red", marker="x", markersize=10, label="Goal"),
-        )
-
-        # Add multiple path types
-        self.viz.add_element(
-            "planned_path",
-            PathDrawer(color="green", linestyle="-", linewidth=3, label="Planned Path"),
-        )
-
-        self.viz.add_element(
-            "actual_path",
-            PathDrawer(color="orange", linestyle=":", linewidth=2, label="Actual Path"),
-        )
-
-    def set_reference_path(self, path):
-        """Set the reference path to visualize"""
-        self.viz.get_element("reference_path").set_path(path)
-
-    def set_planned_path(self, path):
-        """Set the planned path to visualize"""
-        self.viz.get_element("planned_path").set_path(path)
-
-    def update_trajectory(self, x, y):
-        """Add a new position to the trajectory"""
-        self.viz.get_element("trajectory").add_position(x, y)
-
-    def set_goal_position(self, x, y):
-        """Set the goal marker position"""
-        goal_marker = self.viz.get_element("goal_marker")
-        goal_marker.set_position(x, y)
-        goal_marker.update(self.viz.ax)
-
-    def run_simulation_step(self):
-        """Run one simulation step"""
-        # Update trajectory
-        self.update_trajectory(self.car.x, self.car.y)
-
-        # Update visualization
-        self.viz.update_all()
-
-    def initialize_visualization(self):
-        """Initialize the visualization system"""
-        self.viz.initialize_all()
-        self.viz.show_legend()
-        return self.viz.fig, self.viz.ax
-
-    def run_simulation(self, num_steps=None):
-        """Run the complete simulation"""
-        if num_steps is None:
-            num_steps = self.max_steps
-
-        # Initialize visualization
-        self.initialize_visualization()
-
-        for step in range(num_steps):
-            self.run_simulation_step()
-
-            plt.pause(0.0001)
-
-        plt.show()

@@ -4,6 +4,11 @@ import matplotlib
 
 # matplotlib.use("Agg")  # Use a non-interactive backend for saving figures
 import matplotlib.pyplot as plt
+import matplotlib.style as mplstyle
+
+mplstyle.use("fast")
+mplstyle.use(["dark_background", "fast"])
+
 import time
 from typing import List, Tuple, Dict, Optional, Any
 
