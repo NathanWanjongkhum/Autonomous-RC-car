@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 import time
 
-def main():
+def main(stop_event=None):
     # Lower resolution and framerate for stability
     preview_config = {
         "main": {"format": "BGR888", "size": (320, 240)},
@@ -42,6 +42,8 @@ def main():
 
     try:
         while True:
+            if stop_event and stop_event.is_set():
+                break
             # Capture left and right frames
             frame_l = picam_left.capture_array()
             frame_r = picam_right.capture_array()
@@ -66,6 +68,8 @@ def main():
 
             # Break on 'q'
             if cv2.waitKey(1) & 0xFF == ord('q'):
+                if stop_event:
+                    stop_event.set()
                 break
     finally:
         # Cleanup
