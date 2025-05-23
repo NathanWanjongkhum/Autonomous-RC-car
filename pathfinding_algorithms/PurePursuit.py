@@ -1,4 +1,6 @@
 import numpy as np
+from typing import List, Tuple, Optional
+
 
 class PurePursuit:
     """
@@ -8,17 +10,19 @@ class PurePursuit:
     tracking a point ahead of the vehicle on the path.
     """
 
-    def __init__(self, lookahead_distance=0.5):
+    def __init__(self, lookahead_distance: float = 0.5) -> None:
         """
         Initialize the controller
 
         Parameters:
         lookahead_distance: Distance ahead of the car to look for path points
         """
-        self.lookahead_distance = lookahead_distance
-        self.path = []  # List of (x, y) points defining the path
+        self.lookahead_distance: float = lookahead_distance
+        self.path: List[Tuple[float, float]] = (
+            []
+        )  # List of (x, y) points defining the path
 
-    def set_path(self, path):
+    def set_path(self, path: List[Tuple[float, float]]) -> None:
         """
         Set the path to follow
 
@@ -27,7 +31,9 @@ class PurePursuit:
         """
         self.path = path
 
-    def get_target_point(self, x, y):
+    def get_target_point(
+        self, x: float, y: float
+    ) -> Tuple[Optional[float], Optional[float]]:
         """
         Find the target point on the path that is lookahead_distance away
 
@@ -42,18 +48,18 @@ class PurePursuit:
             return None, None
 
         # Find the closest point on the path
-        min_dist = float("inf")
-        closest_idx = 0
+        min_dist: float = float("inf")
+        closest_idx: int = 0
 
         for i, (path_x, path_y) in enumerate(self.path):
-            dist = np.sqrt((path_x - x) ** 2 + (path_y - y) ** 2)
+            dist: float = np.sqrt((path_x - x) ** 2 + (path_y - y) ** 2)
             if dist < min_dist:
                 min_dist = dist
                 closest_idx = i
 
         # Search forward from the closest point to find a point at lookahead distance
-        target_idx = closest_idx
-        target_dist = min_dist
+        target_idx: int = closest_idx
+        target_dist: float = min_dist
 
         while target_dist < self.lookahead_distance and target_idx + 1 < len(self.path):
             target_idx += 1
@@ -68,7 +74,9 @@ class PurePursuit:
 
         return self.path[target_idx]
 
-    def compute_steering(self, x, y, theta, velocity):
+    def compute_steering(
+        self, x: float, y: float, theta: float, velocity: float
+    ) -> float:
         """
         Compute the steering command (angular velocity) to reach the target point
 
@@ -81,25 +89,29 @@ class PurePursuit:
         angular_velocity: Desired angular velocity
         """
         # Get target point
-        target_x, target_y = self.get_target_point(x, y)
+        target_point: Tuple[Optional[float], Optional[float]] = self.get_target_point(
+            x, y
+        )
+        target_x: Optional[float] = target_point[0]
+        target_y: Optional[float] = target_point[1]
 
         # If no target point found, return zero steering
-        if target_x is None:
+        if target_x is None or target_y is None:
             return 0.0
 
         # Calculate angle to target in vehicle frame
-        target_angle = np.arctan2(target_y - y, target_x - x)
+        target_angle: float = np.arctan2(target_y - y, target_x - x)
 
         # Calculate heading error
-        alpha = target_angle - theta
+        alpha: float = target_angle - theta
 
         # Normalize to [-pi, pi]
-        alpha = np.arctan2(np.sin(alpha), np.cos(alpha))
+        alpha = float(np.arctan2(np.sin(alpha), np.cos(alpha)))
 
         # Calculate curvature (1/R) = 2*sin(alpha) / lookahead_distance
-        curvature = 2 * np.sin(alpha) / self.lookahead_distance
+        curvature: float = 2 * np.sin(alpha) / self.lookahead_distance
 
         # Angular velocity = curvature * velocity
-        angular_velocity = curvature * velocity
+        angular_velocity: float = curvature * velocity
 
         return angular_velocity

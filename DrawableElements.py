@@ -422,8 +422,11 @@ class VisualizationManager:
     def _initialize_default_elements(self):
         """Initialize default drawable elements"""
         # Car elements
-        self.elements["car_body"] = CarBodyDrawer(self.car)
-        self.elements["wheels"] = WheelDrawer(self.car)
+        self.elements["car_body"] = CarBodyDrawer(self.car, color="white")
+        self.elements["wheels"] = WheelDrawer(
+            self.car,
+            color="white",
+        )
         self.elements["steering_lines"] = SteeringLinesDrawer(self.car)
 
         # Environment elements

@@ -1,7 +1,6 @@
 import numpy as np
 
-import matplotlib
-
+# import matplotlib
 # matplotlib.use("Agg")  # Use a non-interactive backend for saving figures
 import matplotlib.pyplot as plt
 import matplotlib.style as mplstyle
@@ -10,9 +9,41 @@ mplstyle.use("fast")
 mplstyle.use(["dark_background", "fast"])
 
 import time
-from typing import List, Tuple, Dict, Optional, Any
+from typing import List, Tuple, Dict, Optional, Any, TypedDict, Union
 
-from DrawableElements import *
+from robots.AckermannSteeringCar import AckermannSteeringCar
+from pathfinding_algorithms.ConstantPPC import ConstantPurePursuitController
+from DrawableElements import (
+    VisualizationManager,
+    MarkerDrawer,
+    PathDrawer,
+    TrajectoryDrawer,
+)
+
+
+class SimulationMetrics(TypedDict):
+    mean_path_error: float
+    max_path_error: float
+    path_error_std: float
+    total_time: float
+    steps: int
+    mean_velocity: float
+    max_velocity: float
+    mean_steering: float
+    max_steering: float
+
+
+class SimulationResults(TypedDict):
+    positions: List[Tuple[float, float]]
+    headings: List[float]
+    velocities: List[float]
+    steering_angles: List[float]
+    target_points: List[Optional[Tuple[float, float]]]
+    timestamps: List[float]
+    steps: int
+    completion_reason: str
+    completed: bool
+    metrics: SimulationMetrics
 
 
 class SimulationState:
@@ -39,7 +70,6 @@ class SimulationState:
 
         # Timing information
         self.timestamps: List[float] = []  # Time at each state
-        self.step_durations: List[float] = []  # Duration of each simulation step
 
         # Additional debug information
         self.control_errors: List[float] = []  # Control errors at each step
@@ -48,7 +78,11 @@ class SimulationState:
         self.path: List[Tuple[float, float]] = []  # Reference path
 
     def record_state(
-        self, car, controller, timestamp: float, step_duration: Optional[float] = None
+        self,
+        car: AckermannSteeringCar,
+        controller: ConstantPurePursuitController,
+        timestamp: float,
+        step_duration: Optional[float] = None,
     ):
         """
         Record current state of the simulation
@@ -65,16 +99,18 @@ class SimulationState:
         self.steering_angles.append(car.steering_angle)
 
         # Get target point if available
-        target = controller.get_target_point(car.x, car.y)
-        if target and len(target) >= 2:
-            self.target_points.append((target[0], target[1]))
-        else:
+        # The get_target_point method returns a tuple of (Optional[float], Optional[float], int)
+        # We only need the first two elements for the target point coordinates.
+        target_x, target_y, _ = controller.get_target_point(car.x, car.y)
+
+        # Append None if target_x or target_y is None, otherwise append the tuple
+        if target_x is None or target_y is None:
             self.target_points.append(None)
+        else:
+            self.target_points.append((target_x, target_y))
 
         # Timing
         self.timestamps.append(timestamp)
-        if step_duration is not None:
-            self.step_durations.append(step_duration)
 
         # Optional: additional controller metrics
         if hasattr(controller, "get_steering_metrics"):
@@ -95,18 +131,27 @@ class SimulationState:
         self.target_points.clear()
         self.lookahead_distances.clear()
         self.timestamps.clear()
-        self.step_durations.clear()
         self.control_errors.clear()
         # Note: We don't clear the path as it's a reference
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> "SimulationMetrics":
         """
         Calculate and return performance metrics
 
         Returns:
         dict: Dictionary of performance metrics
         """
-        metrics = {}
+        metrics: SimulationMetrics = {
+            "mean_path_error": 0.0,
+            "max_path_error": 0.0,
+            "path_error_std": 0.0,
+            "total_time": 0.0,
+            "steps": 0,
+            "mean_velocity": 0.0,
+            "max_velocity": 0.0,
+            "mean_steering": 0.0,
+            "max_steering": 0.0,
+        }
 
         if not self.positions or not self.path:
             return metrics
@@ -114,7 +159,7 @@ class SimulationState:
         # Calculate path following error
         if self.path and len(self.positions) > 0:
             # Mean distance to closest path point
-            path_errors = []
+            path_errors: List[float] = []
             for pos in self.positions:
                 min_dist = float("inf")
                 for path_point in self.path:
@@ -122,9 +167,9 @@ class SimulationState:
                     min_dist = min(min_dist, dist)
                 path_errors.append(min_dist)
 
-            metrics["mean_path_error"] = np.mean(path_errors)
-            metrics["max_path_error"] = np.max(path_errors)
-            metrics["path_error_std"] = np.std(path_errors)
+            metrics["mean_path_error"] = float(np.mean(path_errors))
+            metrics["max_path_error"] = float(np.max(path_errors))
+            metrics["path_error_std"] = float(np.std(path_errors))
 
         # Time metrics
         if self.timestamps:
@@ -133,17 +178,19 @@ class SimulationState:
 
         # Velocity metrics
         if self.velocities:
-            metrics["mean_velocity"] = np.mean(self.velocities)
-            metrics["max_velocity"] = np.max(self.velocities)
+            metrics["mean_velocity"] = float(np.mean(self.velocities))
+            metrics["max_velocity"] = float(np.max(self.velocities))
 
         # Steering metrics
         if self.steering_angles:
-            metrics["mean_steering"] = np.mean(np.abs(self.steering_angles))
-            metrics["max_steering"] = np.max(np.abs(self.steering_angles))
+            metrics["mean_steering"] = float(np.mean(np.abs(self.steering_angles)))
+            metrics["max_steering"] = float(np.max(np.abs(self.steering_angles)))
 
         return metrics
 
-    def get_state_at_index(self, index: int) -> Dict[str, Any]:
+    def get_state_at_index(
+        self, index: int
+    ) -> Dict[str, Union[float, Tuple[float, float], Optional[Tuple[float, float]]]]:
         """
         Get complete state at a specific index
 
@@ -156,7 +203,9 @@ class SimulationState:
         if index < 0 or index >= len(self.positions):
             return {}
 
-        state = {
+        state: Dict[
+            str, Union[float, Tuple[float, float], Optional[Tuple[float, float]]]
+        ] = {
             "position": self.positions[index],
             "heading": self.headings[index],
             "velocity": self.velocities[index],
@@ -164,7 +213,7 @@ class SimulationState:
             "timestamp": self.timestamps[index],
         }
 
-        if index < len(self.target_points) and self.target_points[index]:
+        if index < len(self.target_points):
             state["target_point"] = self.target_points[index]
 
         if index < len(self.control_errors):
@@ -230,7 +279,12 @@ class PurePursuitSimulation:
         - We have defined a pure pursuit controller
     """
 
-    def __init__(self, car, controller, config: Optional[SimulationConfig] = None):
+    def __init__(
+        self,
+        car: AckermannSteeringCar,
+        controller: ConstantPurePursuitController,
+        config: Optional[SimulationConfig] = None,
+    ):
         """
         Initialize the simulation
 
@@ -251,10 +305,10 @@ class PurePursuitSimulation:
         self.completion_reason = ""
 
         # Path and mapping
-        self.path = []
+        self.path: List[Tuple[float, float]] = []
 
         # Visualization
-        self.viz = None
+        self.viz: Optional[VisualizationManager] = None
         if self.config.visualize:
             self.setup_visualization()
 
@@ -287,12 +341,7 @@ class PurePursuitSimulation:
         # Add multiple path types
         self.viz.add_element(
             "planned_path",
-            PathDrawer(color="green", linestyle="-", linewidth=3, label="Planned Path"),
-        )
-
-        self.viz.add_element(
-            "actual_path",
-            PathDrawer(color="orange", linestyle=":", linewidth=2, label="Actual Path"),
+            PathDrawer(color="b", linestyle="--", linewidth=1, label="Planned Path"),
         )
 
     def initialize_visualization(self):
@@ -321,7 +370,12 @@ class PurePursuitSimulation:
         self.state_history.set_path(path)
 
         if self.viz:
-            self.viz.get_element("reference_path").set_path(path)
+            # Ensure the element exists and is of the correct type
+            planned_path_drawer = self.viz.get_element(
+                "planned_path"
+            )  # Changed to planned_path as per setup_visualization
+            if isinstance(planned_path_drawer, PathDrawer):
+                planned_path_drawer.set_path(path)
 
             # Set goal marker at the end of the path
             if path:
@@ -336,8 +390,9 @@ class PurePursuitSimulation:
         """
         if self.viz:
             goal_marker = self.viz.get_element("goal_marker")
-            goal_marker.set_position(x, y)
-            goal_marker.update(self.viz.ax)
+            if isinstance(goal_marker, MarkerDrawer):
+                goal_marker.set_position(x, y)
+                goal_marker.update(self.viz.ax)
 
     def update_trajectory(self, x: float, y: float):
         """
@@ -347,7 +402,11 @@ class PurePursuitSimulation:
         x, y: New position to add
         """
         if self.viz:
-            self.viz.get_element("trajectory").add_position(x, y)
+            trajectory_drawer = self.viz.get_element("trajectory")
+            if isinstance(
+                trajectory_drawer, TrajectoryDrawer
+            ):  # Ensure it's a TrajectoryDrawer
+                trajectory_drawer.add_position(x, y)
 
     def reset_simulation(self):
         """
@@ -372,7 +431,11 @@ class PurePursuitSimulation:
         # Reset visualization
         if self.viz:
             # Clear trajectory
-            self.viz.get_element("trajectory").set_positions([])
+            trajectory_drawer = self.viz.get_element("trajectory")
+            if isinstance(
+                trajectory_drawer, TrajectoryDrawer
+            ):  # Ensure it's a TrajectoryDrawer
+                trajectory_drawer.set_positions([])
 
             # Reset other visualization elements as needed
             self.viz.update_all()
@@ -456,7 +519,7 @@ class PurePursuitSimulation:
         self,
         path: Optional[List[Tuple[float, float]]] = None,
         num_steps: Optional[int] = None,
-    ) -> Dict[str, Any]:
+    ) -> "SimulationResults":
         """
         Run the complete simulation
 
@@ -477,9 +540,8 @@ class PurePursuitSimulation:
             self.car.y = path[0][1]
 
             if self.viz:
-                self.viz.get_element("start_marker").set_position(
-                    self.car.x, self.car.y
-                )
+                start_marker: MarkerDrawer = self.viz.get_element("start_marker")  # type: ignore
+                start_marker.set_position(self.car.x, self.car.y)
 
         # Use provided num_steps if specified, otherwise use config
         if num_steps is not None:
@@ -512,14 +574,14 @@ class PurePursuitSimulation:
         # Return simulation results
         return self.get_results()
 
-    def get_results(self) -> Dict[str, Any]:
+    def get_results(self) -> "SimulationResults":
         """
         Get simulation results
 
         Returns:
         dict: Simulation results including state history and metrics
         """
-        results = {
+        results: SimulationResults = {
             "positions": self.state_history.positions,
             "headings": self.state_history.headings,
             "velocities": self.state_history.velocities,
@@ -536,7 +598,7 @@ class PurePursuitSimulation:
 
     def plot_results(
         self,
-        results: Optional[Dict[str, Any]] = None,
+        results: Optional["SimulationResults"] = None,
         show_metrics: bool = True,
         save_path: Optional[str] = None,
     ):

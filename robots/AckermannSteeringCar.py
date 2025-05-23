@@ -1,4 +1,5 @@
 import numpy as np
+from typing import List, Tuple
 
 
 class AckermannSteeringCar:
@@ -23,51 +24,55 @@ class AckermannSteeringCar:
 
     def __init__(
         self,
-        x=0,
-        y=0,
-        theta=0,
-        wheelbase=0.25,  # Distance between front and rear axles (meters)
-        wheel_radius=0.05,
-        wheel_width=0.04,  # Width of wheel (meters)
-        wheel_offset=0.03,  # How far wheels extend beyond the body width (meters)
-        max_velocity=0.5,
-        max_steering_angle=np.radians(
+        x: float = 0.0,
+        y: float = 0.0,
+        theta: float = 0.0,
+        wheelbase: float = 0.25,  # Distance between front and rear axles (meters)
+        wheel_radius: float = 0.05,
+        wheel_width: float = 0.04,  # Width of wheel (meters)
+        wheel_offset: float = 0.03,  # How far wheels extend beyond the body width (meters)
+        max_velocity: float = 0.5,
+        max_steering_angle: float = np.radians(
             35
         ),  # Max steering angle in radians (~35 degrees)
-        max_angular_velocity=1.0,
-        length=0.3,  # Car length (meters)
-        width=0.2,  # Car width (meters)
-    ):
+        max_angular_velocity: float = 1.0,
+        length: float = 0.3,  # Car length (meters)
+        width: float = 0.2,  # Car width (meters)
+    ) -> None:
         # State variables
-        self.x = x  # Position x (meters)
-        self.y = y  # Position y (meters)
-        self.theta = theta  # Orientation (radians)
-        self.steering_angle = 0.0  # Front wheel steering angle (radians)
+        self.x: float = x  # Position x (meters)
+        self.y: float = y  # Position y (meters)
+        self.theta: float = theta  # Orientation (radians)
+        self.steering_angle: float = 0.0  # Front wheel steering angle (radians)
 
         # Physical parameters
-        self.wheelbase = wheelbase  # Distance between front and rear axles (meters)
-        self.wheel_radius = wheel_radius  # Wheel radius (meters)
-        self.wheel_width = wheel_width  # Width of wheel (meters)
-        self.wheel_offset = (
+        self.wheelbase: float = (
+            wheelbase  # Distance between front and rear axles (meters)
+        )
+        self.wheel_radius: float = wheel_radius  # Wheel radius (meters)
+        self.wheel_width: float = wheel_width  # Width of wheel (meters)
+        self.wheel_offset: float = (
             wheel_offset  # How far wheels extend beyond the body (meters)
         )
-        self.max_velocity = max_velocity  # Maximum linear velocity (m/s)
-        self.max_steering_angle = max_steering_angle  # Maximum steering angle (rad)
-        self.max_angular_velocity = (
+        self.max_velocity: float = max_velocity  # Maximum linear velocity (m/s)
+        self.max_steering_angle: float = (
+            max_steering_angle  # Maximum steering angle (rad)
+        )
+        self.max_angular_velocity: float = (
             max_angular_velocity  # Maximum angular velocity (rad/s)
         )
 
         # Control variables
-        self.v = 0  # Linear velocity (m/s)
-        self.omega = (
-            0  # Angular velocity (rad/s) - derived from steering angle and velocity
+        self.v: float = 0.0  # Linear velocity (m/s)
+        self.omega: float = (
+            0.0  # Angular velocity (rad/s) - derived from steering angle and velocity
         )
 
         # Car dimensions (rectangular shape)
-        self.length = length  # Car length (meters)
-        self.width = width  # Car width (meters)
+        self.length: float = length  # Car length (meters)
+        self.width: float = width  # Car width (meters)
 
-    def update_state(self, dt):
+    def update_state(self, dt: float):
         """
         Update car state based on velocity and steering angle over time dt
 
@@ -92,7 +97,7 @@ class AckermannSteeringCar:
         # Normalize theta to (-pi, pi) to prevent growing continuously
         self.theta = np.arctan2(np.sin(self.theta), np.cos(self.theta))
 
-    def set_control_inputs(self, v, steering_angle):
+    def set_control_inputs(self, v: float, steering_angle: float):
         """
         Set the linear velocity and steering angle
 
@@ -122,7 +127,7 @@ class AckermannSteeringCar:
         else:
             self.omega = 0
 
-    def get_corners(self):
+    def get_corners(self) -> List[Tuple[float, float]]:
         """
         Get the four corners of the car for collision detection and visualization
 
@@ -157,7 +162,7 @@ class AckermannSteeringCar:
 
         return [front_right, front_left, rear_left, rear_right]
 
-    def visualize_steering(self):
+    def visualize_steering(self) -> List[Tuple[float, float, float, float]]:
         """
         Get coordinates to visualize the steering angle
 
