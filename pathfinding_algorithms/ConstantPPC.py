@@ -24,11 +24,16 @@ class ConstantPurePursuitController:
         angular_velocity: float = 0.5,
         base_lookahead: float = 0.5,
         reference_point: str = "rear",
-        use_feedforward: bool = True,
         min_actuation_interval: float = 0.3,
         time_constant: float = 0.2,
-        left_angle: float = 15,
-        right_angle: float = -15,
+        max_steering_angle: float = 35,
+        # left_angle: float = 15,
+        # right_angle: float = -15,
+        max_integral_degrees: float = 10.0,  # Maximum integral correction in degrees
+        feedforward_lookahead_points: int = 3,  # How many points to look ahead
+        feedforward_lookahead_time: float = 0.5,  # Alternative: time-based lookahead
+        hysteresis_threshold: float = 8.0,
+        dead_zone_threshold: float = 0.2,
     ) -> None:
         # Controller parameters
         self.angular_velocity: float = angular_velocity
@@ -36,7 +41,18 @@ class ConstantPurePursuitController:
         self.min_lookahead: float = 0.2
         self.max_lookahead: float = 1.5
         self.reference_point: str = reference_point  # 'front' or 'rear'
-        self.use_feedforward: bool = use_feedforward
+        self.max_steering_angle: float = np.radians(max_steering_angle)
+        self.dead_zone_threshold = np.radians(dead_zone_threshold)
+
+        # Proper integral limits based on steering angle
+        self.max_integral_correction = np.radians(max_integral_degrees)
+
+        # Alternative: Base on percentage of max steering
+        # self.max_integral_correction = 0.3 * np.radians(35)  # 30% of max steering
+
+        # Configurable feedforward lookahead
+        self.feedforward_lookahead_points = feedforward_lookahead_points
+        self.feedforward_lookahead_time = feedforward_lookahead_time
 
         # Path data
         self.path: List[Tuple[float, float]] = []
@@ -56,16 +72,23 @@ class ConstantPurePursuitController:
         self.target_points: List[Tuple[float, float]] = []
 
         # Discrete steering state parameters
+        # self.steering_states: Dict[str, float] = {
+        #     "left": left_angle,  # Left steering angle
+        #     "neutral": 0.0,  # Neutral (center) steering
+        #     "right": right_angle,  # Right steering angle
+        # }
+
         self.steering_states: Dict[str, float] = {
-            "left": np.radians(left_angle),  # Left steering angle
+            "left": self.max_steering_angle,  # Left steering angle
             "neutral": 0.0,  # Neutral (center) steering
-            "right": np.radians(right_angle),  # Right steering angle
+            "right": -self.max_steering_angle,  # Right steering angle
         }
 
-        # Hysteresis thresholds to prevent oscillation
-        self.threshold_to_left: float = np.radians(10)  # Threshold to switch to left
-        self.threshold_to_right: float = np.radians(-10)  # Threshold to switch to right
-        self.threshold_to_neutral: float = np.radians(5)  # Threshold band for neutral
+        # Hysteresis thresholds to prevent oscillations
+        self.threshold_to_left: float = np.radians(hysteresis_threshold)
+        self.threshold_to_right: float = -np.radians(hysteresis_threshold)
+        self.threshold_to_neutral: float = np.radians(hysteresis_threshold) * 0.8
+        # 20% dead zone
 
         # Actuation rate limiting
         self.current_state: str = "neutral"  # Current steering state
@@ -268,152 +291,211 @@ class ConstantPurePursuitController:
 
         return self.current_angle
 
+    def calculate_time_based_lookahead(
+        self, closest_idx: int, lookahead_time: float = 0.5
+    ):
+        """
+        Look ahead by time, not points
+
+        Example: At 0.5 m/s with 0.5s lookahead = look 0.25m ahead
+        At 1.0 m/s with 0.5s lookahead = look 0.5m ahead
+        """
+        if not hasattr(self, "path_resolution"):
+            return 3  # Fallback to fixed points
+
+        lookahead_distance = self.angular_velocity * lookahead_time
+        look_ahead_points = int(lookahead_distance / self.path_resolution)
+
+        return min(look_ahead_points, len(self.path_curvature) - closest_idx - 1)
+
+    def calculate_distance_based_lookahead(
+        self, closest_idx: int, lookahead_distance: float = 0.3
+    ):
+        """
+        Look ahead by fixed distance regardless of path resolution
+
+        Example: Always look 30cm ahead
+        """
+        if not hasattr(self, "path_resolution"):
+            return 3  # Fallback
+
+        look_ahead_points = int(lookahead_distance / self.path_resolution)
+        return min(look_ahead_points, len(self.path_curvature) - closest_idx - 1)
+
+    def calculate_adaptive_lookahead(self, closest_idx: int):
+        """
+        Look further ahead on straights, closer on curves
+
+        Reasoning: Gentle curves need early preparation, sharp curves need immediate response
+        """
+        if closest_idx >= len(self.path_curvature):
+            return 3
+
+        current_curvature = abs(self.path_curvature[closest_idx])
+
+        if current_curvature < 0.1:  # Straight or gentle curve
+            base_lookahead = 5  # Look far ahead
+        elif current_curvature < 0.5:  # Moderate curve
+            base_lookahead = 3  # Standard lookahead
+        else:  # Sharp curve
+            base_lookahead = 1  # Look close ahead
+
+        return min(base_lookahead, len(self.path_curvature) - closest_idx - 1)
+
+    def calculate_weighted_curvature(self, closest_idx: int, max_lookahead: int = 5):
+        """
+        Instead of single point, use weighted average of upcoming curvature
+
+        Gives smoother feedforward control
+        """
+        if closest_idx >= len(self.path_curvature):
+            return 0.0
+
+        total_weighted_curvature = 0.0
+        total_weight = 0.0
+
+        for i in range(
+            1, min(max_lookahead + 1, len(self.path_curvature) - closest_idx)
+        ):
+            weight = 1.0 / i  # Closer points have higher weight
+            curvature = self.path_curvature[closest_idx + i]
+
+            total_weighted_curvature += weight * curvature
+            total_weight += weight
+
+        return total_weighted_curvature / total_weight if total_weight > 0 else 0.0
+
     def compute_steering(
         self, x: float, y: float, theta: float, wheelbase: float, dt: float = 0.1
     ) -> Tuple[float, float]:
         """
-        Compute steering for constant angular velocity with discrete angles
+        Discrete RC car controller with fixed velocity and discrete steering
 
-        Parameters:
-        x, y: Current position
-        theta: Current orientation (radians)
-        wheelbase: Distance between front and rear axles
-        dt: Time step for derivative/integral calculations
-
-        Returns:
-        steering_angle: Actual steering angle (radians)
-        linear_velocity: Desired linear velocity (m/s)
+        Process:
+        1. Use Pure Pursuit + PID to calculate desired steering angle
+        2. Map to discrete steering state (left/neutral/right)
+        3. Return actual steering angle + fixed velocity
         """
+
+        # ========== PURE PURSUIT CONTROL ==========
+
         # Adjust reference point if using front axle
-        calc_x: float
-        calc_y: float
-        if self.reference_point == "front":
-            # Convert front to rear axle position for calculations
-            rear_x: float = x - wheelbase * np.cos(theta)
-            rear_y: float = y - wheelbase * np.sin(theta)
-            calc_x, calc_y = rear_x, rear_y
-        else:
-            calc_x, calc_y = x, y
+        calc_x, calc_y = (
+            (x, y)
+            if self.reference_point == "rear"
+            else (x - wheelbase * np.cos(theta), y - wheelbase * np.sin(theta))
+        )
 
         # Get target point
         target_x, target_y, closest_idx = self.get_target_point(calc_x, calc_y)
-
-        # If no target found, maintain speed
         if target_x is None or target_y is None:
             return 0.0, self.angular_velocity
 
-        # Calculate angle to target in vehicle frame
-        target_angle: float = np.arctan2(target_y - calc_y, target_x - calc_x)
-
-        # Calculate heading error
-        heading_error: float = target_angle - theta
-
-        # Normalize to [-pi, pi]
-        heading_error = float(np.arctan2(np.sin(heading_error), np.cos(heading_error)))
+        # Pure Pursuit: Calculate desired steering angle
+        target_angle = np.arctan2(target_y - calc_y, target_x - calc_x)
+        heading_error = target_angle - theta
+        heading_error = np.arctan2(np.sin(heading_error), np.cos(heading_error))
+        # Apply dead zone to prevent oscillations on straights
+        if abs(heading_error) < self.dead_zone_threshold:
+            heading_error = 0.0
 
         # Update error history for PID
         self.error_history.append(heading_error)
-        # if len(self.error_history) > 20:  # Limit history size
-        #     self.error_history.pop(0)
 
-        # Calculate curvature for Pure Pursuit
-        curvature: float = 2 * np.sin(heading_error) / self.base_lookahead
+        # Pure Pursuit base steering calculation
+        lookahead_distance = np.sqrt(
+            (target_x - calc_x) ** 2 + (target_y - calc_y) ** 2
+        )
 
-        # For constant angular velocity:
-        # angular_velocity = curvature * linear_velocity
-        # Therefore: linear_velocity = angular_velocity / curvature
-
-        # Handle straight segments (avoid division by zero)
-        linear_velocity: float
-        if abs(curvature) < 0.001:
-            linear_velocity = 0.5  # Default velocity for straight segments
+        if lookahead_distance > 0.01:
+            base_steering = np.arctan2(
+                2 * wheelbase * np.sin(heading_error), lookahead_distance
+            )
         else:
-            # Compute linear velocity for constant angular velocity
-            linear_velocity = self.angular_velocity / abs(curvature)
+            base_steering = 0.0
 
-        # PID control for heading correction
-        p_term: float = self.kp * heading_error
+        # ========== PID CONTROL ==========
 
-        # Integral term
+        # PID terms
+        p_term = self.kp * heading_error
+
+        # Integral term with anti-windup
         self.error_sum += heading_error * dt
-        i_term: float = self.ki * self.error_sum
-        # Anti-windup
+        i_term = self.ki * self.error_sum
         i_term = np.clip(i_term, -0.5, 0.5)
 
         # Derivative term
-        d_term: float = 0.0
-        if len(self.error_history) > 1:
-            # n_samples = min(5, len(self.error_history))
-            # recent_errors = list(self.error_history)[-n_samples:]
-            if dt > 0:
-                # derivative = (recent_errors[-1] - recent_errors[0]) / (n_samples * dt)
+        d_term = 0.0
+        if len(self.error_history) > 1 and dt > 0:
+            if abs(heading_error) > np.radians(0.5):
                 d_term = self.kd * (heading_error - self.last_error) / dt
 
         self.last_error = heading_error
 
         # Feedforward term based on path curvature
-        ff_term: float = 0.0
-        if self.use_feedforward and closest_idx < len(self.path_curvature):
-            # Look ahead for upcoming curvature
-            look_ahead: int = min(3, len(self.path_curvature) - closest_idx - 1)
-            future_idx: int = closest_idx + look_ahead
-            path_curvature: float = self.path_curvature[future_idx]
-            ff_term = 0.2 * path_curvature * wheelbase  # Feedforward gain
+        ff_term = 0.0
+        if closest_idx < len(self.path_curvature):
+            look_ahead = min(
+                self.feedforward_lookahead_points,
+                len(self.path_curvature) - closest_idx - 1,
+            )
+
+            future_idx = closest_idx + look_ahead
+            path_curvature = self.path_curvature[future_idx]
+            if abs(path_curvature) > 0.001:
+                ff_term = 0.2 * path_curvature * wheelbase
+
+            # Method 2: Time-based lookahead (more sophisticated)
+            # Calculate how many path points represent the lookahead time
+            # This accounts for varying path resolution and vehicle speed
+            # if hasattr(self, "path_resolution"):  # meters per point
+            #     lookahead_distance = (
+            #         self.angular_velocity * self.feedforward_lookahead_time
+            #     )
+            #     look_ahead = min(
+            #         int(lookahead_distance / self.path_resolution),
+            #         len(self.path_curvature) - closest_idx - 1,
+            #     )
+            # else:
+            #     look_ahead = self.feedforward_lookahead_points  # Fallback
+
+            future_idx = closest_idx + look_ahead
+            path_curvature = self.path_curvature[future_idx]
+
+            if abs(path_curvature) > 0.001:
+                ff_term = 0.2 * path_curvature * wheelbase
 
         # Combine all control terms
-        control_correction: float = p_term + i_term + d_term + ff_term
+        control_correction = p_term + i_term + d_term + ff_term
 
-        # For Ackermann steering with constant angular velocity:
-        # θ̇ = v * tan(φ) / L
-        # Solving for φ: φ = arctan(θ̇ * L / v)
-        base_steering: float = np.arctan2(
-            self.angular_velocity * wheelbase, linear_velocity
+        # Calculate desired steering angle
+        desired_angle = base_steering + control_correction
+
+        # Limit to physical steering constraints
+        desired_angle = np.clip(
+            desired_angle, -self.max_steering_angle, self.max_steering_angle
         )
 
-        # Apply sign from curvature direction
-        base_steering *= np.sign(curvature)
+        # ========== DISCRETE STEERING STATE SELECTION ==========
 
-        # Add PID correction to base steering
-        desired_angle: float = base_steering + control_correction
-
-        # Limit steering angle
-        max_steering: float = np.radians(35)  # Maximum steering angle
-        desired_angle = np.clip(desired_angle, -max_steering, max_steering)
-
-        # Store the desired angle for visualization/debugging
-        self.desired_angles.append(desired_angle)
-
-        # ---- Discrete steering logic ----
-        # Get current time for rate limiting
-        current_time: float = time.time()
-
-        # Determine target discrete state
-        target_state: str = self.determine_target_state(desired_angle)
-
-        # Update steering state (respecting rate limits)
+        # Apply your existing discrete steering logic
+        current_time = time.time()
+        target_state = self.determine_target_state(desired_angle)
         self.update_steering_state(target_state, current_time)
 
-        # Get target angle for the current state
-        target_angle_discrete: float = self.steering_states[self.current_state]
-
-        # Update physical model to get actual steering angle
-        actual_steering_angle: float = self.update_physical_model(
+        # Get the actual steering angle from your discrete states
+        target_angle_discrete = self.steering_states[self.current_state]
+        actual_steering_angle = self.update_physical_model(
             target_angle_discrete, current_time
         )
 
-        # Store actual angle and state for tracking
+        # Store for visualization/debugging
+        self.desired_angles.append(desired_angle)
         self.actual_angles.append(actual_steering_angle)
         self.steering_states_history.append(self.current_state)
 
-        # Calculate angular velocity from actual steering angle for Ackermann
-        # if abs(linear_velocity) > 1e-5:  # Only calculate if moving
-        #     self.angular_velocity = (
-        #         linear_velocity * np.tan(actual_steering_angle) / wheelbase
-        #     )
-        # else:
-        #     self.angular_velocity = 0.0
-
-        return actual_steering_angle, linear_velocity
+        print(actual_steering_angle, self.angular_velocity)
+        return actual_steering_angle, self.angular_velocity
 
     def visualize_control(
         self,
@@ -442,7 +524,12 @@ class ConstantPurePursuitController:
             target_x: List[float] = [p[0] for p in self.target_points]
             target_y: List[float] = [p[1] for p in self.target_points]
             ax.scatter(
-                target_x, target_y, color="g", s=30, alpha=0.5, label="Target Points"
+                target_x,
+                target_y,
+                color="g",
+                s=30,
+                alpha=0.5,
+                label="Target Points",
             )
 
         # Mark start and end
@@ -577,8 +664,184 @@ class ConstantPurePursuitController:
             "current_angle": self.current_angle,
             "target_angle": self.steering_states[self.current_state],
             "time_since_last_actuation": time.time() - self.last_actuation_time,
-            "desired_angle": self.desired_angles[-1] if self.desired_angles else 0.0,
+            "desired_angle": (self.desired_angles[-1] if self.desired_angles else 0.0),
             "heading_error": self.error_history[-1] if self.error_history else 0.0,
             "p_term": self.kp * (self.error_history[-1] if self.error_history else 0.0),
             "i_term": self.ki * self.error_sum,
         }
+
+    # def compute_steering(
+    #     self, x: float, y: float, theta: float, wheelbase: float, dt: float = 0.1
+    # ) -> Tuple[float, float]:
+    #     """
+    #     Compute steering for constant angular velocity with discrete angles
+
+    #     Parameters:
+    #     x, y: Current position
+    #     theta: Current orientation (radians)
+    #     wheelbase: Distance between front and rear axles
+    #     dt: Time step for derivative/integral calculations
+
+    #     Returns:
+    #     steering_angle: Actual steering angle (radians)
+    #     linear_velocity: Desired linear velocity (m/s)
+    #     """
+    #     # Adjust reference point if using front axle
+    #     calc_x: float
+    #     calc_y: float
+    #     if self.reference_point == "front":
+    #         # Convert front to rear axle position for calculations
+    #         rear_x: float = x - wheelbase * np.cos(theta)
+    #         rear_y: float = y - wheelbase * np.sin(theta)
+    #         calc_x, calc_y = rear_x, rear_y
+    #     else:
+    #         calc_x, calc_y = x, y
+
+    #     # Get target point
+    #     target_x, target_y, closest_idx = self.get_target_point(calc_x, calc_y)
+
+    #     # If no target found, maintain speed
+    #     if target_x is None or target_y is None:
+    #         return 0.0, self.angular_velocity
+
+    #     # Calculate angle to target in vehicle frame
+    #     target_angle: float = np.arctan2(target_y - calc_y, target_x - calc_x)
+
+    #     # Calculate heading error
+    #     heading_error: float = target_angle - theta
+
+    #     # Normalize to [-pi, pi]
+    #     heading_error = float(np.arctan2(np.sin(heading_error), np.cos(heading_error)))
+
+    #     # Apply a dead zone to heading error to prevent oscillations on straight paths
+    #     dead_zone_threshold: float = np.radians(0.2)  # e.g., 0.2 degrees
+    #     if abs(heading_error) < dead_zone_threshold:
+    #         heading_error = 0.0
+
+    #     # Update error history for PID
+    #     self.error_history.append(heading_error)
+    #     # if len(self.error_history) > 20:  # Limit history size
+    #     #     self.error_history.pop(0)
+
+    #     # Calculate curvature for Pure Pursuit
+    #     curvature: float = 2 * np.sin(heading_error) / self.base_lookahead
+
+    #     # For constant angular velocity:
+    #     # angular_velocity = curvature * linear_velocity
+    #     # Therefore: linear_velocity = angular_velocity / curvature
+
+    #     # Handle straight segments (avoid division by zero)
+    #     linear_velocity = self.angular_velocity / abs(curvature)
+
+    #     # Clip linear velocity to maximum allowed
+    #     # linear_velocity = np.clip(linear_velocity, 0.0, self.max_linear_velocity)
+
+    #     # PID control for heading correction
+    #     p_term: float = self.kp * heading_error
+
+    #     # Integral term
+    #     self.error_sum += heading_error * dt
+    #     i_term: float = self.ki * self.error_sum
+    #     # Anti-windup
+    #     i_term = np.clip(i_term, -0.5, 0.5)
+
+    #     # Derivative term
+    #     d_term: float = 0.0
+    #     if len(self.error_history) > 1:
+    #         if dt > 0:
+    #             # Only apply derivative term if heading error is significant
+    #             if abs(heading_error) > np.radians(0.5):  # Threshold of 0.5 degrees
+    #                 d_term = self.kd * (heading_error - self.last_error) / dt
+
+    #     self.last_error = heading_error
+
+    #     # Feedforward term based on path curvature
+    #     ff_term: float = 0.0
+    #     if closest_idx < len(self.path_curvature):
+    #         # Look ahead for upcoming curvature
+    #         look_ahead: int = min(3, len(self.path_curvature) - closest_idx - 1)
+    #         future_idx: int = closest_idx + look_ahead
+    #         path_curvature: float = self.path_curvature[future_idx]
+
+    #         # Explicitly zero out feedforward term if path is straight
+    #         if (
+    #             abs(path_curvature) < 0.001
+    #         ):  # Use the same threshold as for linear_velocity and base_steering
+    #             ff_term = 0.0
+    #         else:
+    #             ff_term = 0.2 * path_curvature * wheelbase  # Feedforward gain
+
+    #     # Combine all control terms
+    #     control_correction: float = p_term + i_term + d_term + ff_term
+
+    #     # For Ackermann steering with constant angular velocity:
+    #     # θ̇ = v * tan(φ) / L
+    #     # Solving for φ: φ = arctan(θ̇ * L / v)
+    #     base_steering: float
+    #     if abs(curvature) < 0.001:  # Use the same threshold as for linear_velocity
+    #         base_steering = 0.0
+    #     else:
+    #         base_steering = np.arctan2(
+    #             self.angular_velocity * wheelbase, linear_velocity
+    #         )
+    #         # Apply sign from curvature direction
+    #         base_steering *= np.sign(curvature)
+
+    #     # Add PID correction to base steering
+    #     desired_angle: float = base_steering + control_correction
+
+    #     # Limit steering angle
+    #     max_steering: float = np.radians(35)  # Maximum steering angle
+    #     desired_angle = np.clip(desired_angle, -max_steering, max_steering)
+
+    #     # Store the desired angle for visualization/debugging
+    #     self.desired_angles.append(desired_angle)
+
+    #     # ---- Discrete steering logic ----
+    #     # Get current time for rate limiting
+    #     current_time: float = time.time()
+
+    #     # Determine target discrete state
+    #     target_state: str = self.determine_target_state(desired_angle)
+
+    #     # Update steering state (respecting rate limits)
+    #     self.update_steering_state(target_state, current_time)
+
+    #     # Get target angle for the current state
+    #     target_angle_discrete: float = self.steering_states[self.current_state]
+
+    #     # Update physical model to get actual steering angle
+    #     actual_steering_angle: float = self.update_physical_model(
+    #         target_angle_discrete, current_time
+    #     )
+
+    #     # Store actual angle and state for tracking
+    #     self.actual_angles.append(actual_steering_angle)
+    #     self.steering_states_history.append(self.current_state)
+
+    #     return actual_steering_angle, linear_velocity
+
+
+###################################
+# Start conservative, increase until you see oscillation
+# max_integral_degrees = 5.0  # Start here
+# Test on tight curves - if car consistently undershoots, increase
+# If you see overshoot/oscillation after tight curves, decrease
+
+# Alternative approach: Base on your discrete steering angles
+# If your discrete states are ±15°, maybe limit integral to ±5°
+# max_integral_correction = 0.3 * np.radians(15)  # 30% of discrete step size
+###################################
+# Method 1: Based on your car's response time
+# How long does it take your servo to move from neutral to full deflection?
+# servo_response_time = 0.2  # seconds
+# lookahead_time = 2 * servo_response_time  # Look ahead 2x response time
+
+# Method 2: Based on path resolution
+# If your path points are 5cm apart and you want to look 20cm ahead:
+# lookahead_distance = 0.20  # meters
+# lookahead_points = int(lookahead_distance / path_resolution)
+
+# Method 3: Start with distance-based, tune empirically
+# Test on S-curves: too small = jerky, too large = cuts corners
+###################################

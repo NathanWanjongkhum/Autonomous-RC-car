@@ -31,7 +31,6 @@ class AckermannSteeringCar:
         wheel_radius: float = 0.05,
         wheel_width: float = 0.04,  # Width of wheel (meters)
         wheel_offset: float = 0.03,  # How far wheels extend beyond the body width (meters)
-        max_velocity: float = 0.5,
         max_steering_angle: float = np.radians(
             35
         ),  # Max steering angle in radians (~35 degrees)
@@ -54,7 +53,6 @@ class AckermannSteeringCar:
         self.wheel_offset: float = (
             wheel_offset  # How far wheels extend beyond the body (meters)
         )
-        self.max_velocity: float = max_velocity  # Maximum linear velocity (m/s)
         self.max_steering_angle: float = (
             max_steering_angle  # Maximum steering angle (rad)
         )
@@ -107,25 +105,8 @@ class AckermannSteeringCar:
         v: Desired linear velocity (m/s)
         steering_angle: Desired steering angle (radians)
         """
-        # Apply limits to requested control inputs
-        self.v = np.clip(v, -self.max_velocity, self.max_velocity)
-
-        # Adjust steering angle limits based on speed for stability
-        # At higher speeds, reduce maximum allowed steering angle
-        speed_factor = min(1.0, 0.5 + 0.5 * (1 - abs(self.v) / self.max_velocity))
-        effective_max_steering = self.max_steering_angle * speed_factor
-
-        # Apply limits to steering angle
-        self.steering_angle = np.clip(
-            steering_angle, -effective_max_steering, effective_max_steering
-        )
-
-        # Calculate resulting angular velocity (for compatibility with algorithms
-        # that might still expect it as a control input)
-        if abs(self.v) > 1e-5:
-            self.omega = self.v * np.tan(self.steering_angle) / self.wheelbase
-        else:
-            self.omega = 0
+        self.v = v
+        self.steering_angle = steering_angle
 
     def get_corners(self) -> List[Tuple[float, float]]:
         """

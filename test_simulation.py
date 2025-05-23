@@ -86,12 +86,17 @@ def run_simulation(
 ) -> SimulationResults:
     # Create the car model
     car: AckermannSteeringCar = AckermannSteeringCar(
-        wheelbase=0.25, max_velocity=0.5, max_steering_angle=np.radians(35)
+        wheelbase=0.25, max_angular_velocity=0.5, max_steering_angle=np.radians(35)
     )
 
     # Create the controller
     controller: ConstantPurePursuitController = ConstantPurePursuitController(
-        angular_velocity=0.5, base_lookahead=1
+        angular_velocity=0.5,
+        hysteresis_threshold=10.0,
+        dead_zone_threshold=5.0,
+        base_lookahead=1,
+        max_integral_degrees=10.0,
+        feedforward_lookahead_points=5,
     )
 
     # Create simulation configuration
