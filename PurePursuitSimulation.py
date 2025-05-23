@@ -5,7 +5,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.style as mplstyle
 
-mplstyle.use("fast")
 mplstyle.use(["dark_background", "fast"])
 
 import time
