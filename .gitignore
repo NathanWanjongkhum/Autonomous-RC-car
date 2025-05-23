@@ -2,3 +2,5 @@
 simulation_results/
 .clinerules/
 __pycache__/
+TODO.txt
+apf_performance_simple.png
