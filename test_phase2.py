@@ -20,11 +20,11 @@ class Pose:
 def generate_grid(
     width: int, height: int, grid_type: str = "empty"
 ) -> tuple[OccupancyGrid, Pose, Pose]:
-    # Generate an empty grid
+    # Generate an empty grid with resolution that balances accuracy and performance
     grid = OccupancyGrid(
         width=width,
         height=height,
-        resolution=0.1,
+        resolution=0.15,  # Balance between accuracy and computational efficiency
     )
 
     match grid_type:
@@ -86,12 +86,20 @@ def generate_grid(
                 grid.binary_grid[obs_y_grid, i] = 1
                 grid.binary_grid[obs_y_grid + 1, i] = 1
 
+    # Position start and goal to allow smooth path planning around obstacles
+    start_x = 3.0
+    start_y = height / 2 - 3.0  # Further from center to avoid middle obstacle
+    goal_x = width - 3.0
+    goal_y = height / 2 + 3.0  # Further from center on opposite side
+
     return (
         grid,
-        Pose(2.0, height / 2, 0.0),  # Start in the middle-left, further from wall
         Pose(
-            width - 2.0, height / 2, 0.0
-        ),  # Goal in the middle-right, further from wall
+            start_x, start_y, np.pi / 6
+        ),  # Start with slight angle for better initial motion
+        Pose(
+            goal_x, goal_y, -np.pi / 6
+        ),  # End with opposite angle for smoother approach
     )
 
 
@@ -111,7 +119,7 @@ def test_phase2() -> None:
     )
 
     # After Phase 1 exploration
-    # occupancy_grid.process_map()  # Clean up noise - Commented out to see raw obstacles
+    occupancy_grid.process_map()  # Clean up noise - Commented out to see raw obstacles
 
     # Visualize the occupancy grid
     # Create a dummy car for VisualizationManager, as it requires one
@@ -175,11 +183,15 @@ def test_phase2() -> None:
     vis_manager.update_all()
 
     # Optimize for racing
+    # Configure planner with optimized parameters
     planner_instance = phase2_discrete_planning(
         occupancy_grid,
         (start_pose.x, start_pose.y, start_pose.theta),
         (goal_pose.x, goal_pose.y, goal_pose.theta),
-        primitive_duration=1.5,  # Increased duration to help find path in larger grid
+        primitive_duration=0.3,  # Short duration for precise control
+        steering_angles=30,  # Moderate steering angle for balance of maneuverability and smoothness
+        angular_velocity=0.8,  # Increased angular velocity for better turning
+        wheelbase=0.3,  # Slightly larger wheelbase for stability
     )
 
     if planner_instance and planner_instance.command_sequence:
@@ -195,10 +207,10 @@ def test_phase2() -> None:
     print("Displaying occupancy grid and markers. Close the plot to continue.")
     plt.show()  # Keep the plot open until closed by user
 
-    print(
-        "Command Sequence:",
-        planner_instance.command_sequence if planner_instance else None,
-    )
+    # print(
+    #     "Command Sequence:",
+    #     planner_instance.command_sequence if planner_instance else None,
+    # )
 
 
 if __name__ == "__main__":

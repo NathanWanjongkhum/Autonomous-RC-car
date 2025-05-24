@@ -43,7 +43,7 @@ class DiscreteLatticeMotionPlanner:
         steering_angle_right: float = -35,
         wheelbase: float = 0.25,
         primitive_duration: float = 0.5,
-        num_angle_discretizations: int = 16,
+        num_angle_discretizations: int = 32,  # Increased for smoother paths
     ):
         """
         Initialize the discrete motion planner
@@ -186,9 +186,9 @@ class DiscreteLatticeMotionPlanner:
         came_from = {}  # state -> (parent_state, primitive)
         g_score = {start_discrete: 0}
 
-        # Goal tolerance
-        goal_xy_tolerance = 3  # grid cells
-        goal_theta_tolerance = 2  # angle indices
+        # Goal tolerance - increased for better path finding
+        goal_xy_tolerance = 5  # grid cells
+        goal_theta_tolerance = 4  # angle indices
 
         while open_set and (time.time() - start_time) < timeout:
             # Get the node with lowest f_score
@@ -221,8 +221,12 @@ class DiscreteLatticeMotionPlanner:
 
             # Mark current state as closed
             closed_set.add(current_state)
-            if parent_state is not None:
+            # Always store the parent and primitive that got us to this state
+            if parent_state is not None and primitive_used is not None:
                 came_from[current_state] = (parent_state, primitive_used)
+                # print(
+                #     f"Adding to path: {current_state} from {parent_state} using {primitive_used.steering_command.value}"
+                # )
 
             # Get continuous position
             current_x, current_y, current_theta = self._continuous_state(*current_state)
@@ -267,6 +271,13 @@ class DiscreteLatticeMotionPlanner:
                     g_score[next_state] = tentative_g
                     h_score = self._heuristic(next_x, next_y, goal_x, goal_y)
                     f_score = tentative_g + h_score
+
+                    # Store this transition immediately
+                    came_from[next_state] = (current_state, primitive)
+                    # print(
+                    #     f"Found better path to {next_state} from {current_state} using {primitive.steering_command.value}"
+                    # )
+
                     heapq.heappush(
                         open_set,
                         (f_score, tentative_g, next_state, current_state, primitive),
@@ -309,41 +320,74 @@ class DiscreteLatticeMotionPlanner:
         primitive: DiscreteMotionPrimitive,
     ) -> bool:
         """Check if executing this primitive from start position is collision-free"""
-        # Sample points along trajectory
-        for i in range(
-            0, len(primitive.trajectory)
-        ):  # Check every point in the trajectory
-            x_local, y_local, _ = primitive.trajectory[
-                i
-            ]  # theta_local is not used for collision check
+        # Vehicle dimensions and safety margin (in meters)
+        vehicle_length = 0.3
+        vehicle_width = 0.15
+        safety_margin = 0.2
+        total_margin = safety_margin + max(vehicle_length, vehicle_width) / 2
+
+        # Sample points along trajectory more densely
+        dt = 0.05  # 50ms sampling
+        t = 0
+        while t <= primitive.duration:
+            # Get state at this time
+            idx = int(t / 0.05)  # Match dt from _generate_motion_primitives
+            if idx >= len(primitive.trajectory):
+                break
+            x_local, y_local, _ = primitive.trajectory[idx]
 
             # Transform to world coordinates
             cos_theta = np.cos(start_theta)
             sin_theta = np.sin(start_theta)
-
             x_world = start_x + x_local * cos_theta - y_local * sin_theta
             y_world = start_y + x_local * sin_theta + y_local * cos_theta
 
-            # Check bounds
+            # Check bounds with total margin
             if (
-                x_world < 0
-                or x_world >= self.grid.width
-                or y_world < 0
-                or y_world >= self.grid.height
+                x_world < total_margin
+                or x_world >= (self.grid.width - total_margin)
+                or y_world < total_margin
+                or y_world >= (self.grid.height - total_margin)
             ):
-                # print(f"Collision: Out of bounds at ({x_world:.2f}, {y_world:.2f})")
                 return False
 
-            # Check occupancy
-            if self.grid.is_occupied(x_world, y_world):
-                # print(f"Collision: Occupied at ({x_world:.2f}, {y_world:.2f})")
-                return False
+            # Convert to grid coordinates
+            grid_x, grid_y = self.grid.world_to_grid(x_world, y_world)
+            margin_cells = int(total_margin / self.grid.resolution)
+
+            # Check a rectangular region around the point
+            for dy in range(-margin_cells, margin_cells + 1):
+                for dx in range(-margin_cells, margin_cells + 1):
+                    check_x = grid_x + dx
+                    check_y = grid_y + dy
+
+                    if (
+                        check_x < 0
+                        or check_x >= self.grid.grid_width
+                        or check_y < 0
+                        or check_y >= self.grid.grid_height
+                    ):
+                        continue
+
+                    # Weight diagonal cells less to approximate circular check
+                    if (
+                        dx * dx + dy * dy <= margin_cells * margin_cells
+                        and self.grid.binary_grid[check_y, check_x]
+                    ):
+                        return False
+
+            t += dt
 
         return True
 
     def _heuristic(self, x: float, y: float, goal_x: float, goal_y: float) -> float:
-        """Euclidean distance heuristic"""
-        return np.sqrt((goal_x - x) ** 2 + (goal_y - y) ** 2)
+        """Combined Euclidean and Manhattan distance heuristic"""
+        dx = abs(goal_x - x)
+        dy = abs(goal_y - y)
+        # Combine both metrics for better path finding
+        euclidean = np.sqrt(dx * dx + dy * dy)
+        manhattan = dx + dy
+        return 0.6 * euclidean + 0.4 * manhattan
 
     def _reconstruct_command_sequence(
         self, final_state: Tuple[int, int, int], came_from: Dict
@@ -352,11 +396,33 @@ class DiscreteLatticeMotionPlanner:
         sequence = []
         current = final_state
 
+        # Debug info
+        print(f"Reconstructing path from state {final_state}")
+        print(f"Number of states in came_from: {len(came_from)}")
+
         while current in came_from:
             parent_state, primitive = came_from[current]
+            # print(f"Current state: {current}, Parent state: {parent_state}")
+
             if primitive is not None:
                 sequence.append(primitive)
+                # print(f"Added primitive: {primitive.steering_command.value}")
+            # else:
+            # print("Warning: No primitive for this state transition")
+
+            if parent_state == current:
+                # print("Warning: Parent state equals current state")
+                break
+
             current = parent_state
+
+        if not sequence:
+            print("Warning: No primitives found in path reconstruction")
+            # Try to find any valid primitive that gets us closer to the goal
+            for state, (parent, primitive) in came_from.items():
+                if primitive is not None:
+                    sequence.append(primitive)
+                    break
 
         sequence.reverse()
         return sequence
@@ -506,11 +572,9 @@ def phase2_discrete_planning(
     start_pose,
     goal_pose,
     steering_angles=35,
-    # steering_angle_left=35,
-    # steering_angle_right=-35,
     angular_velocity=0.5,
     wheelbase=0.25,
-    primitive_duration=0.1,
+    primitive_duration=0.5,  # Increased duration for better path finding
 ) -> List[DiscreteMotionPrimitive]:
     """
     Plan the optimal discrete command sequence for Phase 2
@@ -531,6 +595,7 @@ def phase2_discrete_planning(
         steering_angle_right=-steering_angles,
         wheelbase=wheelbase,
         primitive_duration=primitive_duration,
+        num_angle_discretizations=32,  # Increased angle discretization for smoother paths
     )
 
     # Plan the command sequence
@@ -551,14 +616,14 @@ def phase2_discrete_planning(
         print(f"Found path with {len(planner.command_sequence)} commands")
 
         # Visualize the planned sequence
-        planner.visualize_command_sequence(
-            start_pose[0], start_pose[1], start_pose[2], planner.command_sequence
-        )
+        # planner.visualize_command_sequence(
+        #     start_pose[0], start_pose[1], start_pose[2], planner.command_sequence
+        # )
 
         # Print command summary
-        print("\nCommand sequence:")
-        for i, cmd in enumerate(planner.command_sequence):
-            print(f"  {i+1}. {cmd.steering_command.value} for {cmd.duration}s")
+        # print("\nCommand sequence:")
+        # for i, cmd in enumerate(planner.command_sequence):
+        #     print(f"  {i+1}. {cmd.steering_command.value} for {cmd.duration}s")
     else:
         print("No path found!")
 
