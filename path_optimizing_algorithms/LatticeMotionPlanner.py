@@ -91,6 +91,8 @@ class DiscreteLatticeMotionPlanner:
         self.motion_primitives = {}
         self._generate_motion_primitives()
 
+        self.explored_states = []  # To store states visited during search
+
     def _generate_motion_primitives(self):
         """
         Generate motion primitives for each discrete angle and steering command.
@@ -194,6 +196,9 @@ class DiscreteLatticeMotionPlanner:
                 open_set
             )
 
+            # Store explored state for visualization
+            self.explored_states.append(self._continuous_state(*current_state))
+
             # Check if pose is close enough to goal
             dx = abs(current_state[0] - goal_discrete[0])
             dy = abs(current_state[1] - goal_discrete[1])
@@ -220,7 +225,7 @@ class DiscreteLatticeMotionPlanner:
                 came_from[current_state] = (parent_state, primitive_used)
 
             # Get continuous position
-            current_x, current_y, _ = self._continuous_state(*current_state)
+            current_x, current_y, current_theta = self._continuous_state(*current_state)
 
             # Try each motion primitive
             current_angle_idx = current_state[2]
@@ -229,7 +234,7 @@ class DiscreteLatticeMotionPlanner:
             ].items():
                 # Check if trajectory is collision-free
                 if not self._is_primitive_collision_free(
-                    current_x, current_y, primitive
+                    current_x, current_y, current_theta, primitive
                 ):
                     continue
 
@@ -277,11 +282,14 @@ class DiscreteLatticeMotionPlanner:
         x_idx = int(round(x / self.xy_resolution))
         y_idx = int(round(y / self.xy_resolution))
 
-        # Normalize theta to (-π, π] and then [0, 2π)
-        theta_norm = np.arctan2(np.sin(theta), np.cos(theta)) % (2 * np.pi)
+        # Normalize theta to [0, 2π)
+        theta_norm = (theta + np.pi) % (2 * np.pi) - np.pi  # Normalize to [-pi, pi)
+        theta_norm = (theta_norm + 2 * np.pi) % (2 * np.pi)  # Then to [0, 2pi)
+
         # convert to index
         theta_idx = int(round(theta_norm / self.angle_resolution)) % self.num_angles
 
+        # print(f"Discretize: ({x:.2f}, {y:.2f}, {np.degrees(theta):.2f} deg) -> ({x_idx}, {y_idx}, {theta_idx})")
         return x_idx, y_idx, theta_idx
 
     def _continuous_state(
@@ -294,15 +302,22 @@ class DiscreteLatticeMotionPlanner:
         return x, y, theta
 
     def _is_primitive_collision_free(
-        self, start_x: float, start_y: float, primitive: DiscreteMotionPrimitive
+        self,
+        start_x: float,
+        start_y: float,
+        start_theta: float,
+        primitive: DiscreteMotionPrimitive,
     ) -> bool:
         """Check if executing this primitive from start position is collision-free"""
         # Sample points along trajectory
-        for i in range(0, len(primitive.trajectory), 3):
-            x_local, y_local, theta_local = primitive.trajectory[i]
+        for i in range(
+            0, len(primitive.trajectory)
+        ):  # Check every point in the trajectory
+            x_local, y_local, _ = primitive.trajectory[
+                i
+            ]  # theta_local is not used for collision check
 
             # Transform to world coordinates
-            start_theta = primitive.trajectory[0][2]
             cos_theta = np.cos(start_theta)
             sin_theta = np.sin(start_theta)
 
@@ -316,10 +331,12 @@ class DiscreteLatticeMotionPlanner:
                 or y_world < 0
                 or y_world >= self.grid.height
             ):
+                # print(f"Collision: Out of bounds at ({x_world:.2f}, {y_world:.2f})")
                 return False
 
             # Check occupancy
             if self.grid.is_occupied(x_world, y_world):
+                # print(f"Collision: Occupied at ({x_world:.2f}, {y_world:.2f})")
                 return False
 
         return True
@@ -441,6 +458,47 @@ class DiscreteLatticeMotionPlanner:
         ax.axis("equal")
         plt.show()
 
+    def visualize_explored_states(self):
+        """Visualize the states explored by the planner."""
+        if not self.explored_states:
+            print("No states were explored to visualize.")
+            return
+
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots(1, 1, figsize=(12, 10))
+
+        # Draw occupancy grid
+        if hasattr(self.grid, "binary_grid"):
+            ax.imshow(
+                self.grid.binary_grid.T,
+                origin="lower",
+                extent=[0, self.grid.width, 0, self.grid.height],
+                cmap="gray_r",
+                alpha=0.3,
+            )
+
+        # Plot explored states
+        explored_x = [s[0] for s in self.explored_states]
+        explored_y = [s[1] for s in self.explored_states]
+        ax.plot(
+            explored_x,
+            explored_y,
+            "o",
+            color="purple",
+            markersize=2,
+            alpha=0.5,
+            label="Explored States",
+        )
+
+        ax.set_xlabel("X (m)")
+        ax.set_ylabel("Y (m)")
+        ax.set_title("Explored States Visualization")
+        ax.legend()
+        ax.grid(True)
+        ax.axis("equal")
+        plt.show()
+
 
 # Integration with your existing system
 def phase2_discrete_planning(
@@ -485,19 +543,23 @@ def phase2_discrete_planning(
         goal_pose[2],
     )
 
-    if command_sequence:
-        print(f"Found path with {len(command_sequence)} commands")
+    planner.command_sequence = (
+        command_sequence  # Store command sequence as an attribute
+    )
+
+    if planner.command_sequence:
+        print(f"Found path with {len(planner.command_sequence)} commands")
 
         # Visualize the planned sequence
         planner.visualize_command_sequence(
-            start_pose[0], start_pose[1], start_pose[2], command_sequence
+            start_pose[0], start_pose[1], start_pose[2], planner.command_sequence
         )
 
         # Print command summary
         print("\nCommand sequence:")
-        for i, cmd in enumerate(command_sequence):
+        for i, cmd in enumerate(planner.command_sequence):
             print(f"  {i+1}. {cmd.steering_command.value} for {cmd.duration}s")
     else:
         print("No path found!")
 
-    return command_sequence
+    return planner

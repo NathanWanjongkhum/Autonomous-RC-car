@@ -34,8 +34,10 @@ class OccupancyGrid:
 
         # Binary grid (for path planning) - 0 = free, 1 = occupied
         # self.binary_grid = np.ones((self.grid_height, self.grid_width), dtype=bool) # Initialize as occupied
-        self.binary_grid = np.zeros((self.grid_height, self.grid_width), dtype=bool)  # Initialize as free
-        
+        self.binary_grid = np.zeros(
+            (self.grid_height, self.grid_width), dtype=bool
+        )  # Initialize as free
+
         # Log-odds representation for Bayesian updates
         # Log-odds representation makes probabilistic updates more efficient
         # log-odds = log(p/(1-p))
@@ -62,8 +64,8 @@ class OccupancyGrid:
         Returns:
         grid_x, grid_y: Grid cell indices
         """
-        grid_x = math.ceil(x / self.resolution)
-        grid_y = math.ceil(y / self.resolution)
+        grid_x = math.floor(x / self.resolution)
+        grid_y = math.floor(y / self.resolution)
 
         # Ensure within grid bounds
         grid_x = np.clip(grid_x, 0, self.grid_width - 1)

@@ -5,6 +5,7 @@ from path_optimizing_algorithms.LatticeMotionPlanner import (
     phase2_discrete_planning,
 )
 from DrawableElements import VisualizationManager, MarkerDrawer
+import numpy as np
 
 
 @dataclass
@@ -17,9 +18,9 @@ class Pose:
 
 
 def generate_grid(
-    width: int, height: int, grid_type: str = "corridor"
+    width: int, height: int, grid_type: str = "empty"
 ) -> tuple[OccupancyGrid, Pose, Pose]:
-    # Generate a corridor
+    # Generate an empty grid
     grid = OccupancyGrid(
         width=width,
         height=height,
@@ -27,9 +28,10 @@ def generate_grid(
     )
 
     match grid_type:
+        case "empty":
+            # All cells are free (initialized to 0 in OccupancyGrid)
+            pass
         case "corridor":
-            # Generate a corridor
-            # Generate a straight horizontal corridor
             # Outer walls
             for i in range(width):
                 grid.binary_grid[i, 0] = 1  # Bottom wall
@@ -44,11 +46,52 @@ def generate_grid(
             for x in range(1, width - 1):
                 for y in range(corridor_start_y, corridor_end_y + 1):
                     grid.binary_grid[x, y] = 0  # Clear inner area
+        case "obstacles":
+            # Outer walls
+            for i in range(width):
+                grid.binary_grid[i, 0] = 1  # Bottom wall
+                grid.binary_grid[i, height - 1] = 1  # Top wall
+            for i in range(height):
+                grid.binary_grid[0, i] = 1  # Left wall
+                grid.binary_grid[width - 1, i] = 1  # Right wall
+
+            # Add some obstacles that allow a path, defined in world coordinates
+            # A few blocks in the top-left (relative to world dimensions)
+            ox1, oy1 = grid.world_to_grid(width * 0.2, height * 0.2)
+            grid.binary_grid[oy1, ox1] = 1
+            grid.binary_grid[oy1 + 1, ox1] = 1
+            grid.binary_grid[oy1, ox1 + 1] = 1
+            grid.binary_grid[oy1 + 1, ox1 + 1] = 1
+
+            # A few blocks in the bottom-right (relative to world dimensions)
+            ox2, oy2 = grid.world_to_grid(width * 0.8, height * 0.8)
+            grid.binary_grid[oy2, ox2] = 1
+            grid.binary_grid[oy2 + 1, ox2] = 1
+            grid.binary_grid[oy2, ox2 + 1] = 1
+            grid.binary_grid[oy2 + 1, ox2 + 1] = 1
+
+            # A long obstacle in the middle, leaving space above and below
+            # Define start and end world coordinates for the obstacle
+            obs_start_x_world = width * 0.3
+            obs_end_x_world = width * 0.7
+            obs_y_world = height / 2
+
+            # Convert to grid coordinates
+            obs_start_x_grid, obs_y_grid = grid.world_to_grid(
+                obs_start_x_world, obs_y_world
+            )
+            obs_end_x_grid, _ = grid.world_to_grid(obs_end_x_world, obs_y_world)
+
+            for i in range(obs_start_x_grid, obs_end_x_grid + 1):
+                grid.binary_grid[obs_y_grid, i] = 1
+                grid.binary_grid[obs_y_grid + 1, i] = 1
 
     return (
         grid,
-        Pose(1.0, int(height / 2), 0.0),  # Start in the middle of the left side
-        Pose(width - 1.0, int(height / 2), 0.0),  # Goal in the middle of the right side
+        Pose(2.0, height / 2, 0.0),  # Start in the middle-left, further from wall
+        Pose(
+            width - 2.0, height / 2, 0.0
+        ),  # Goal in the middle-right, further from wall
     )
 
 
@@ -61,14 +104,14 @@ def test_phase2() -> None:
     # So we can use A* search on a lattice of possible states
 
     # Initialize the occupancy grid
-    grid_width = 10
-    grid_height = 10
+    grid_width = 20
+    grid_height = 20
     occupancy_grid, start_pose, goal_pose = generate_grid(
-        grid_width, grid_height, "corridor"
+        grid_width, grid_height, "obstacles"
     )
 
     # After Phase 1 exploration
-    occupancy_grid.process_map()  # Clean up noise
+    # occupancy_grid.process_map()  # Clean up noise - Commented out to see raw obstacles
 
     # Visualize the occupancy grid
     # Create a dummy car for VisualizationManager, as it requires one
@@ -132,24 +175,30 @@ def test_phase2() -> None:
     vis_manager.update_all()
 
     # Optimize for racing
-    command_sequence = phase2_discrete_planning(
+    planner_instance = phase2_discrete_planning(
         occupancy_grid,
         (start_pose.x, start_pose.y, start_pose.theta),
         (goal_pose.x, goal_pose.y, goal_pose.theta),
-        primitive_duration=0.5,  # Increased duration to help find path in larger grid
+        primitive_duration=1.5,  # Increased duration to help find path in larger grid
     )
 
-    if command_sequence:
+    if planner_instance and planner_instance.command_sequence:
         # The phase2_discrete_planning function already visualizes the path
         # So we just need to keep the plot open
         print("Path found and visualized by LatticeMotionPlanner.")
     else:
         print("No path found by LatticeMotionPlanner.")
+        if planner_instance:
+            print("Visualizing explored states...")
+            planner_instance.visualize_explored_states()
 
     print("Displaying occupancy grid and markers. Close the plot to continue.")
     plt.show()  # Keep the plot open until closed by user
 
-    print("Command Sequence:", command_sequence)
+    print(
+        "Command Sequence:",
+        planner_instance.command_sequence if planner_instance else None,
+    )
 
 
 if __name__ == "__main__":
