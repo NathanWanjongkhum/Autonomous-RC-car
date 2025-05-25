@@ -7,6 +7,7 @@ mplstyle.use(["dark_background", "fast"])
 
 
 from path_optimizing_algorithms.LatticeMotionPlanner import (
+    apply_motion_primitive,
     phase2_discrete_planning,
 )
 import numpy as np
@@ -57,7 +58,7 @@ def generate_grid(
             # Outer walls
             for i in range(adjusted_width):
                 grid.binary_grid[i, 0] = 1  # Bottom wall
-                grid.binary_grid[i, height - 1] = 1  # Top wall
+                grid.binary_grid[i, adjusted_height - 1] = 1  # Top wall
             for i in range(adjusted_height):
                 grid.binary_grid[0, i] = 1  # Left wall
                 grid.binary_grid[adjusted_width - 1, i] = 1  # Right wall
@@ -100,8 +101,8 @@ def generate_grid(
     # Position start and goal to allow path planning around obstacles
     start_x = width * 0.1
     start_y = height * 0.1  # Further from center to avoid middle obstacle
-    goal_x = width * 0.9  # Further from center on opposite side
-    goal_y = height * 0.9  # Further from center on opposite side
+    goal_x = width * 0.5  # Further from center on opposite side
+    goal_y = height * 0.91  # Further from center on opposite side
 
     return (
         grid,
@@ -128,68 +129,7 @@ def test_phase2() -> None:
     # After Phase 1 exploration
     # occupancy_grid.process_map()  # Clean up noise
 
-    # Visualize the occupancy grid
-    # Create a dummy car for VisualizationManager, as it requires one
-    # We don't need to simulate car movement here, just visualize the grid
-    class DummyCar:
-        def __init__(self, x, y, theta):
-            self.x = x
-            self.y = y
-            self.theta = theta
-            self.length = 0.3  # Example value
-            self.width = 0.15  # Example value
-            self.wheel_width = 0.05
-            self.wheel_radius = 0.1
-            self.wheel_offset = 0.02
-
-        def get_corners(self):
-            # Dummy implementation for visualization
-            half_length = self.length / 2
-            half_width = self.width / 2
-            corners = [
-                (-half_length, -half_width),
-                (-half_length, half_width),
-                (half_length, half_width),
-                (half_length, -half_width),
-            ]
-            # Rotate and translate
-            rotated_corners = []
-            cos_theta = np.cos(self.theta)
-            sin_theta = np.sin(self.theta)
-            for x, y in corners:
-                rotated_x = x * cos_theta - y * sin_theta + self.x
-                rotated_y = x * sin_theta + y * cos_theta + self.y
-                rotated_corners.append((rotated_x, rotated_y))
-            return rotated_corners
-
-        def visualize_steering(self):
-            return []  # Not needed for grid visualization
-
-    dummy_car = DummyCar(start_pose.x, start_pose.y, start_pose.theta)
     fig, ax = plt.subplots(1, 1, figsize=(12, 10))
-    # vis_manager = VisualizationManager(dummy_car, occupancy_grid)
-    # vis_manager.enable_element("car_body", False)
-    # vis_manager.enable_element("wheels", False)
-    # vis_manager.enable_element("steering_lines", False)
-    # vis_manager.enable_element("reference_path", False)
-    # vis_manager.enable_element("trajectory", True)
-
-    # # Add start and goal markers
-
-    # vis_manager.add_element(
-    #     "start_marker",
-    #     MarkerDrawer(
-    #         start_pose.x, start_pose.y, color="green", marker="o", label="Start"
-    #     ),
-    # )
-    # vis_manager.add_element(
-    #     "goal_marker",
-    #     MarkerDrawer(goal_pose.x, goal_pose.y, color="red", marker="x", label="Goal"),
-    # )
-
-    # vis_manager.initialize_all()
-    # vis_manager.show_legend()
-    # vis_manager.update_all()
 
     print(
         f"Occupancy grid width: {occupancy_grid.width}, height: {occupancy_grid.height}"
@@ -197,23 +137,21 @@ def test_phase2() -> None:
     print(
         f"Occupancy grid grid_width: {occupancy_grid.grid_width}, grid_height: {occupancy_grid.grid_height}"
     )
-    print(f"Start pose: {start_pose}")
-    print(f"Goal pose: {goal_pose}")
 
     # Optimize for racing
     # Configure planner with optimized parameters
-    planner_instance = phase2_discrete_planning(
+    planner = phase2_discrete_planning(
         occupancy_grid,
         start_pose,
         goal_pose,
         ax=ax,
-        primitive_duration=0.3,  # Short duration for precise control
+        primitive_duration=0.5,  # Short duration for precise control
         steering_angles=30,  # Moderate steering angle for balance of maneuverability and smoothness
         angular_velocity=0.8,  # Increased angular velocity for better turning
         wheelbase=0.3,  # Slightly larger wheelbase for stability
     )
 
-    if planner_instance and planner_instance.command_sequence:
+    if planner and planner.command_sequence:
         # Extract trajectory from command sequence
         trajectory = []
         current_x, current_y, current_theta = (
@@ -221,18 +159,22 @@ def test_phase2() -> None:
             start_pose.y,
             start_pose.theta,
         )
-        for primitive in planner_instance.command_sequence:
-            for x_local, y_local, _ in primitive.trajectory:
-                cos_theta = np.cos(current_theta)
-                sin_theta = np.sin(current_theta)
-                x_world = current_x + x_local * cos_theta - y_local * sin_theta
-                y_world = current_y + x_local * sin_theta + y_local * cos_theta
+
+        for primitive in planner.command_sequence:
+            # Transform each point in the primitive's trajectory to world coordinates
+            for x_local, y_local, theta_local in primitive.trajectory:
+                # Transform from primitive's local frame to world frame
+                x_world, y_world, _ = apply_motion_primitive(
+                    (current_x, current_y, current_theta),
+                    (x_local, y_local, theta_local),
+                )
+
                 trajectory.append((x_world, y_world))
-            # Update current position
-            dx, dy, dtheta = primitive.end_displacement
-            current_x += dx * np.cos(current_theta) - dy * np.sin(current_theta)
-            current_y += dx * np.sin(current_theta) + dy * np.cos(current_theta)
-            current_theta += dtheta
+
+            # Update current position using the primitive's end displacement
+            current_x, current_y, current_theta = apply_motion_primitive(
+                (current_x, current_y, current_theta), primitive.end_displacement
+            )
 
             # Update trajectory in VisualizationManager
             # trajectory_drawer = vis_manager.get_element("trajectory")
@@ -241,7 +183,9 @@ def test_phase2() -> None:
             # print(f"TrajectoryDrawer: {trajectory_drawer}")
             # trajectory_drawer.set_positions(trajectory)
 
-        planner_instance.visualize_explored_states(ax=ax)
+        planner.visualize_explored_states(ax=ax)
+        plt.show()
+        print("Displaying occupancy grid and markers. Close the plot to continue.")
 
         # print("Path found and visualized by LatticeMotionPlanner.")
 
@@ -249,9 +193,6 @@ def test_phase2() -> None:
         print("No path found by LatticeMotionPlanner.")
         print("Visualizing explored states...")
         # planner_instance.visualize_explored_states(ax=ax)
-
-    print("Displaying occupancy grid and markers. Close the plot to continue.")
-    plt.show()
 
 
 if __name__ == "__main__":
