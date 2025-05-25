@@ -456,13 +456,9 @@ class DiscreteLatticeMotionPlanner:
         start_x: float,
         start_y: float,
         start_theta: float,
-        command_sequence: List[DiscreteMotionPrimitive],
+        ax=None,
     ):
         """Visualize the planned command sequence"""
-        import matplotlib.pyplot as plt
-
-        fig, ax = plt.subplots(1, 1, figsize=(12, 10))
-
         # Colors for different commands
         colors = {
             SteeringCommand.LEFT: "red",
@@ -470,10 +466,36 @@ class DiscreteLatticeMotionPlanner:
             SteeringCommand.RIGHT: "blue",
         }
 
+        labels = {
+            SteeringCommand.LEFT: "Left",
+            SteeringCommand.NEUTRAL: "Neutral",
+            SteeringCommand.RIGHT: "Right",
+        }
+
+        labeled_commands = set()
+
         # Draw the path
         current_x, current_y, current_theta = start_x, start_y, start_theta
 
-        for i, primitive in enumerate(command_sequence):
+        # Add start marker
+        if ax is not None:
+            ax.plot(
+                start_x,
+                start_y,
+                "ro",
+                markersize=8,
+                label="Start",
+            )
+        else:
+            plt.plot(
+                start_x,
+                start_y,
+                "ro",
+                markersize=8,
+                label="Start",
+            )
+
+        for primitive in self.command_sequence:
             # Get trajectory in world coordinates
             trajectory_world = []
             cos_theta = np.cos(current_theta)
@@ -487,13 +509,40 @@ class DiscreteLatticeMotionPlanner:
             # Plot this segment
             x_coords = [p[0] for p in trajectory_world]
             y_coords = [p[1] for p in trajectory_world]
-            ax.plot(
-                x_coords,
-                y_coords,
-                color=colors[primitive.steering_command],
-                linewidth=3,
-                label=f"{primitive.steering_command.value}" if i == 0 else "",
-            )
+            if ax is not None:
+                if primitive.steering_command not in labeled_commands:
+                    ax.plot(
+                        x_coords,
+                        y_coords,
+                        color=colors[primitive.steering_command],
+                        linewidth=3,
+                        label=labels[primitive.steering_command],
+                    )
+                    labeled_commands.add(primitive.steering_command)
+                else:
+                    ax.plot(
+                        x_coords,
+                        y_coords,
+                        color=colors[primitive.steering_command],
+                        linewidth=3,
+                    )
+            else:
+                if primitive.steering_command not in labeled_commands:
+                    plt.plot(
+                        x_coords,
+                        y_coords,
+                        color=colors[primitive.steering_command],
+                        linewidth=3,
+                        label=labels[primitive.steering_command],
+                    )
+                    labeled_commands.add(primitive.steering_command)
+                else:
+                    plt.plot(
+                        x_coords,
+                        y_coords,
+                        color=colors[primitive.steering_command],
+                        linewidth=3,
+                    )
 
             # Update current position
             dx, dy, dtheta = primitive.end_displacement
@@ -501,23 +550,58 @@ class DiscreteLatticeMotionPlanner:
             current_y += dx * sin_theta + dy * cos_theta
             current_theta += dtheta
 
-        # Draw occupancy grid
-        if hasattr(self.grid, "binary_grid"):
-            ax.imshow(
-                self.grid.binary_grid.T,
-                origin="lower",
-                extent=[0, self.grid.width, 0, self.grid.height],
-                cmap="gray_r",
-                alpha=0.3,
+        # Add end marker
+        if ax is not None and trajectory_world:
+            ax.plot(
+                trajectory_world[-1][0],
+                trajectory_world[-1][1],
+                "rx",
+                markersize=8,
+                label="End",
+            )
+        elif trajectory_world:
+            plt.plot(
+                trajectory_world[-1][0],
+                trajectory_world[-1][1],
+                "rx",
+                markersize=8,
+                label="End",
             )
 
-        ax.set_xlabel("X (m)")
-        ax.set_ylabel("Y (m)")
-        ax.set_title("Discrete Command Sequence Visualization")
-        ax.legend()
-        ax.grid(True)
-        ax.axis("equal")
-        # plt.show() # Remove plt.show()
+        # Draw occupancy grid
+        if hasattr(self.grid, "binary_grid"):
+            if ax is not None:
+                ax.imshow(
+                    self.grid.binary_grid.T,
+                    origin="lower",
+                    extent=[0, self.grid.width, 0, self.grid.height],
+                    cmap="gray_r",
+                    alpha=0.3,
+                )
+            else:
+                plt.imshow(
+                    self.grid.binary_grid.T,
+                    origin="lower",
+                    extent=[0, self.grid.width, 0, self.grid.height],
+                    cmap="gray_r",
+                    alpha=0.3,
+                )
+
+        if ax is not None:
+            ax.set_xlabel("X (m)")
+            ax.set_ylabel("Y (m)")
+            ax.set_title("Discrete Command Sequence Visualization")
+            ax.legend()
+            ax.grid(True)
+            ax.axis("equal")
+        else:
+            plt.xlabel("X (m)")
+            plt.ylabel("Y (m)")
+            plt.title("Discrete Command Sequence Visualization")
+            plt.legend()
+            plt.grid(True)
+            plt.axis("equal")
+            # plt.show() # Remove plt.show()
 
     def visualize_explored_states(self, ax):
         """Visualize the states explored by the planner."""
@@ -544,7 +628,7 @@ class DiscreteLatticeMotionPlanner:
             "o",
             color="purple",
             markersize=2,
-            alpha=0.5,
+            alpha=0.2,
             label="Explored States",
         )
 
@@ -561,6 +645,7 @@ def phase2_discrete_planning(
     occupancy_grid,
     start_pose,
     goal_pose,
+    ax=None,
     steering_angles=35,
     angular_velocity=0.5,
     wheelbase=0.25,
@@ -606,16 +691,20 @@ def phase2_discrete_planning(
     if planner.command_sequence:
         print(f"Found path with {len(planner.command_sequence)} commands")
 
-        # Visualize the planned sequence
-        # planner.visualize_command_sequence(
-        #     start_pose[0], start_pose[1], start_pose[2], planner.command_sequence
-        # )
-
         # Print command summary
         # print("\nCommand sequence:")
         # for i, cmd in enumerate(planner.command_sequence):
         #     print(f"  {i+1}. {cmd.steering_command.value} for {cmd.duration}s")
     else:
         print("No path found!")
+
+    # Visualize the planned sequence
+    if ax is not None:
+        planner.visualize_command_sequence(
+            start_pose.x,
+            start_pose.y,
+            start_pose.theta,
+            ax,
+        )
 
     return planner

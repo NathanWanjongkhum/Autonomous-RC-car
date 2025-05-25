@@ -1,10 +1,14 @@
 from dataclasses import dataclass
 from maps.OccupancyGrid import OccupancyGrid
 import matplotlib.pyplot as plt
+import matplotlib.style as mplstyle
+
+mplstyle.use(["dark_background", "fast"])
+
+
 from path_optimizing_algorithms.LatticeMotionPlanner import (
     phase2_discrete_planning,
 )
-from DrawableElements import VisualizationManager, MarkerDrawer, TrajectoryDrawer
 import numpy as np
 
 
@@ -162,31 +166,30 @@ def test_phase2() -> None:
             return []  # Not needed for grid visualization
 
     dummy_car = DummyCar(start_pose.x, start_pose.y, start_pose.theta)
-    vis_manager = VisualizationManager(dummy_car, occupancy_grid)
-    vis_manager.enable_element("car_body", False)
-    vis_manager.enable_element("wheels", False)
-    vis_manager.enable_element("steering_lines", False)
-    vis_manager.enable_element("reference_path", False)
-    vis_manager.enable_element("trajectory", True)
+    fig, ax = plt.subplots(1, 1, figsize=(12, 10))
+    # vis_manager = VisualizationManager(dummy_car, occupancy_grid)
+    # vis_manager.enable_element("car_body", False)
+    # vis_manager.enable_element("wheels", False)
+    # vis_manager.enable_element("steering_lines", False)
+    # vis_manager.enable_element("reference_path", False)
+    # vis_manager.enable_element("trajectory", True)
 
-    # Add start and goal markers
-    print(f"Grid width: {grid_width}, height: {grid_height}")
-    print(f"Start pose: {start_pose}")
-    print(f"Goal pose: {goal_pose}")
-    vis_manager.add_element(
-        "start_marker",
-        MarkerDrawer(
-            start_pose.x, start_pose.y, color="green", marker="o", label="Start"
-        ),
-    )
-    vis_manager.add_element(
-        "goal_marker",
-        MarkerDrawer(goal_pose.x, goal_pose.y, color="red", marker="x", label="Goal"),
-    )
+    # # Add start and goal markers
 
-    vis_manager.initialize_all()
-    vis_manager.show_legend()
-    vis_manager.update_all()
+    # vis_manager.add_element(
+    #     "start_marker",
+    #     MarkerDrawer(
+    #         start_pose.x, start_pose.y, color="green", marker="o", label="Start"
+    #     ),
+    # )
+    # vis_manager.add_element(
+    #     "goal_marker",
+    #     MarkerDrawer(goal_pose.x, goal_pose.y, color="red", marker="x", label="Goal"),
+    # )
+
+    # vis_manager.initialize_all()
+    # vis_manager.show_legend()
+    # vis_manager.update_all()
 
     print(
         f"Occupancy grid width: {occupancy_grid.width}, height: {occupancy_grid.height}"
@@ -203,6 +206,7 @@ def test_phase2() -> None:
         occupancy_grid,
         start_pose,
         goal_pose,
+        ax=ax,
         primitive_duration=0.3,  # Short duration for precise control
         steering_angles=30,  # Moderate steering angle for balance of maneuverability and smoothness
         angular_velocity=0.8,  # Increased angular velocity for better turning
@@ -230,20 +234,21 @@ def test_phase2() -> None:
             current_y += dx * np.sin(current_theta) + dy * np.cos(current_theta)
             current_theta += dtheta
 
-        # Update trajectory in VisualizationManager
-        trajectory_drawer = vis_manager.get_element("trajectory")
-        if trajectory_drawer and isinstance(trajectory_drawer, TrajectoryDrawer):
+            # Update trajectory in VisualizationManager
+            # trajectory_drawer = vis_manager.get_element("trajectory")
+            # if trajectory_drawer and isinstance(trajectory_drawer, TrajectoryDrawer):
             # print(f"Trajectory: {trajectory}")
             # print(f"TrajectoryDrawer: {trajectory_drawer}")
-            trajectory_drawer.set_positions(trajectory)
-            planner_instance.visualize_explored_states(ax=vis_manager.ax)
+            # trajectory_drawer.set_positions(trajectory)
 
-            print("Path found and visualized by LatticeMotionPlanner.")
+        planner_instance.visualize_explored_states(ax=ax)
+
+        # print("Path found and visualized by LatticeMotionPlanner.")
 
     else:
         print("No path found by LatticeMotionPlanner.")
         print("Visualizing explored states...")
-        planner_instance.visualize_explored_states(ax=vis_manager.ax)
+        # planner_instance.visualize_explored_states(ax=ax)
 
     print("Displaying occupancy grid and markers. Close the plot to continue.")
     plt.show()
