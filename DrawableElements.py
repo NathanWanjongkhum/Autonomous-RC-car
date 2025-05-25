@@ -207,7 +207,12 @@ class OccupancyGridDrawer(DrawableElement):
         grid_img = self._create_grid_image()
         self.grid_image = ax.imshow(
             grid_img,
-            extent=(0, self.grid.width, 0, self.grid.height),
+            extent=(
+                0,
+                self.grid.width * self.grid.resolution,
+                0,
+                self.grid.height * self.grid.resolution,
+            ),
             origin="lower",
             interpolation="nearest",
         )
@@ -215,17 +220,18 @@ class OccupancyGridDrawer(DrawableElement):
         return self.grid_image
 
     def _create_grid_image(self):
-        grid_img = np.zeros((self.grid.grid_height, self.grid.grid_width, 4))
+        grid_img = np.zeros((self.grid.grid_width, self.grid.grid_height, 4))
 
         # Set probability visualization (grayscale for unknown areas)
-        grid_img[:, :, 0] = 0.8 * (1 - self.grid.grid)  # Red channel
-        grid_img[:, :, 1] = 0.8 * (1 - self.grid.grid)  # Green channel
-        grid_img[:, :, 2] = 0.8 * (1 - self.grid.grid)  # Blue channel
-        grid_img[:, :, 3] = 0.5  # Semi-transparent for probabilities
+        # grid_img[:, :, 0] = 0.8 * (1 - self.grid.grid)  # Red channel
+        # grid_img[:, :, 1] = 0.8 * (1 - self.grid.grid)  # Green channel
+        # grid_img[:, :, 2] = 0.8 * (1 - self.grid.grid)  # Blue channel
+        # grid_img[:, :, 3] = 0.5  # Semi-transparent for probabilities
 
         # Overlay binary grid (solid red for occupied, solid green for known free)
-        grid_img[self.grid.binary_grid, 0] = 1.0  # Red for occupied
-        grid_img[self.grid.binary_grid, 1:3] = 0.0  # No green/blue for occupied
+        grid_img[self.grid.binary_grid, 0] = 0.0  # Black for occupied
+        grid_img[self.grid.binary_grid, 1] = 0.0  # Black for occupied
+        grid_img[self.grid.binary_grid, 2] = 0.0  # Black for occupied
         grid_img[self.grid.binary_grid, 3] = 1.0  # Fully opaque for occupied
 
         return grid_img
@@ -236,6 +242,14 @@ class OccupancyGridDrawer(DrawableElement):
 
         grid_img = self._create_grid_image()
         self.grid_image.set_data(grid_img)
+        self.grid_image.set_extent(
+            (
+                0,
+                self.grid.width * self.grid.resolution,
+                0,
+                self.grid.height * self.grid.resolution,
+            )
+        )
 
 
 class PathDrawer(DrawableElement):
@@ -432,6 +446,7 @@ class VisualizationManager:
         self.elements["steering_lines"] = SteeringLinesDrawer(self.car, color="magenta")
 
         # Environment elements
+        # Environment elements
         if self.grid:
             self.elements["occupancy_grid"] = OccupancyGridDrawer(self.grid)
 
@@ -440,7 +455,7 @@ class VisualizationManager:
             color="lime", linestyle="--", label="Reference Path"
         )
         self.elements["trajectory"] = TrajectoryDrawer(
-            color="orange", marker=".", markersize=1, label="Trajectory"
+            color="orange", marker=".", markersize=2, label="Trajectory"
         )
 
         # Markers
@@ -456,8 +471,10 @@ class VisualizationManager:
     def _setup_axis(self):
         """Setup the axis properties"""
         if self.grid:
-            self.ax.set_xlim(0, self.grid.width)
-            self.ax.set_ylim(0, self.grid.height)
+            width = self.grid.width
+            height = self.grid.height
+            self.ax.set_xlim(-width / 4, width * 1.25)
+            self.ax.set_ylim(-height / 4, height * 1.25)
         else:
             self.ax.set_xlim(-5, 5)
             self.ax.set_ylim(-5, 5)

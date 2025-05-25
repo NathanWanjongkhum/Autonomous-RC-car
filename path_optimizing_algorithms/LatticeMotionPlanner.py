@@ -1,9 +1,11 @@
+import math
 import numpy as np
 import heapq
 from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass
 import time
 from enum import Enum
+import matplotlib.pyplot as plt
 
 
 class SteeringCommand(Enum):
@@ -43,7 +45,7 @@ class DiscreteLatticeMotionPlanner:
         steering_angle_right: float = -35,
         wheelbase: float = 0.25,
         primitive_duration: float = 0.5,
-        num_angle_discretizations: int = 32,  # Increased for smoother paths
+        num_angle_discretizations: int = 64,  # Increased for smoother paths
     ):
         """
         Initialize the discrete motion planner
@@ -288,24 +290,23 @@ class DiscreteLatticeMotionPlanner:
 
     def _discretize_state(
         self, x: float, y: float, theta: float
-    ) -> Tuple[int, int, int]:
+    ) -> tuple[float, float, float]:
         """Convert continuous state to discrete indices"""
-        x_idx = int(round(x / self.xy_resolution))
-        y_idx = int(round(y / self.xy_resolution))
+        x_idx = int(x / self.xy_resolution)
+        y_idx = int(y / self.xy_resolution)
 
         # Normalize theta to [0, 2π)
-        theta_norm = (theta + np.pi) % (2 * np.pi) - np.pi  # Normalize to [-pi, pi)
-        theta_norm = (theta_norm + 2 * np.pi) % (2 * np.pi)  # Then to [0, 2pi)
+        theta_norm = (theta + np.pi) % (2 * np.pi) - np.pi  # Normalize to [-π, π)
+        theta_norm = (theta_norm + 2 * np.pi) % (2 * np.pi)  # Then to [0, 2π)
 
         # convert to index
         theta_idx = int(round(theta_norm / self.angle_resolution)) % self.num_angles
 
-        # print(f"Discretize: ({x:.2f}, {y:.2f}, {np.degrees(theta):.2f} deg) -> ({x_idx}, {y_idx}, {theta_idx})")
         return x_idx, y_idx, theta_idx
 
     def _continuous_state(
         self, x_idx: int, y_idx: int, theta_idx: int
-    ) -> Tuple[float, float, float]:
+    ) -> tuple[float, float, float]:
         """Convert discrete indices to continuous state"""
         x = x_idx * self.xy_resolution
         y = y_idx * self.xy_resolution
@@ -352,29 +353,23 @@ class DiscreteLatticeMotionPlanner:
                 return False
 
             # Convert to grid coordinates
-            grid_x, grid_y = self.grid.world_to_grid(x_world, y_world)
+            grid_x, grid_y = self.grid._discretize_state(x_world, y_world)
             margin_cells = int(total_margin / self.grid.resolution)
 
             # Check a rectangular region around the point
-            for dy in range(-margin_cells, margin_cells + 1):
-                for dx in range(-margin_cells, margin_cells + 1):
-                    check_x = grid_x + dx
-                    check_y = grid_y + dy
+            check_x = int(grid_x)
+            check_y = int(grid_y)
 
-                    if (
-                        check_x < 0
-                        or check_x >= self.grid.grid_width
-                        or check_y < 0
-                        or check_y >= self.grid.grid_height
-                    ):
-                        continue
+            if (
+                check_x < 0
+                or check_x >= self.grid.grid_width
+                or check_y < 0
+                or check_y >= self.grid.grid_height
+            ):
+                continue
 
-                    # Weight diagonal cells less to approximate circular check
-                    if (
-                        dx * dx + dy * dy <= margin_cells * margin_cells
-                        and self.grid.binary_grid[check_y, check_x]
-                    ):
-                        return False
+            if self.grid.binary_grid[check_y, check_x]:
+                return False
 
             t += dt
 
@@ -522,17 +517,13 @@ class DiscreteLatticeMotionPlanner:
         ax.legend()
         ax.grid(True)
         ax.axis("equal")
-        plt.show()
+        # plt.show() # Remove plt.show()
 
-    def visualize_explored_states(self):
+    def visualize_explored_states(self, ax):
         """Visualize the states explored by the planner."""
         if not self.explored_states:
             print("No states were explored to visualize.")
             return
-
-        import matplotlib.pyplot as plt
-
-        fig, ax = plt.subplots(1, 1, figsize=(12, 10))
 
         # Draw occupancy grid
         if hasattr(self.grid, "binary_grid"):
@@ -563,7 +554,6 @@ class DiscreteLatticeMotionPlanner:
         ax.legend()
         ax.grid(True)
         ax.axis("equal")
-        plt.show()
 
 
 # Integration with your existing system
@@ -575,6 +565,7 @@ def phase2_discrete_planning(
     angular_velocity=0.5,
     wheelbase=0.25,
     primitive_duration=0.5,  # Increased duration for better path finding
+    num_angle_discretizations=64,
 ) -> List[DiscreteMotionPrimitive]:
     """
     Plan the optimal discrete command sequence for Phase 2
@@ -600,12 +591,12 @@ def phase2_discrete_planning(
 
     # Plan the command sequence
     command_sequence = planner.plan_discrete_path(
-        start_pose[0],
-        start_pose[1],
-        start_pose[2],
-        goal_pose[0],
-        goal_pose[1],
-        goal_pose[2],
+        start_pose.x,
+        start_pose.y,
+        start_pose.theta,
+        goal_pose.x,
+        goal_pose.y,
+        goal_pose.theta,
     )
 
     planner.command_sequence = (

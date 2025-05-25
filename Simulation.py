@@ -223,7 +223,7 @@ class Simulation:
                     break
 
                 # Check ground truth (simplified for simulation)
-                grid_x, grid_y = self.grid.world_to_grid(ray_x, ray_y)
+                grid_x, grid_y = self.grid._discretize_state(ray_x, ray_y)
                 if (
                     grid_x < 0
                     or grid_x >= self.grid.grid_width

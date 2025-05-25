@@ -1,6 +1,7 @@
 import itertools
 import numpy as np
 
+
 class AStarPlanner:
     """
     Implements the A* path planning algorithm on a grid map
@@ -70,8 +71,8 @@ class AStarPlanner:
             or None if no path found
         """
         # Convert to grid coordinates
-        start_grid = self.grid.world_to_grid(start_x, start_y)
-        goal_grid = self.grid.world_to_grid(goal_x, goal_y)
+        start_grid = self.grid._discretize_state(start_x, start_y)
+        goal_grid = self.grid._discretize_state(goal_x, goal_y)
 
         # Check if start or goal is in obstacle
         if (
