@@ -278,31 +278,31 @@ def transition_to_phase2(simulation):
         print("Visualizing explored states...")
 
     # Step 5: Create the pure pursuit controller
-    # pure_pursuit = ConstantPurePursuitController(
-    #     angular_velocity=0.8,  # Match lattice planner
-    #     base_lookahead=0.6,  # Larger lookahead for higher speeds
-    #     hysteresis_threshold=5.0,  # Tighter for precision
-    #     dead_zone_threshold=2.0,  # Smaller dead zone
-    #     max_integral_degrees=15.0,  # More aggressive correction
-    #     feedforward_lookahead_points=7,  # Look further ahead
-    # )
+    pure_pursuit = ConstantPurePursuitController(
+        angular_velocity=0.8,  # Match lattice planner
+        base_lookahead=0.6,  # Larger lookahead for higher speeds
+        hysteresis_threshold=5.0,  # Tighter for precision
+        dead_zone_threshold=2.0,  # Smaller dead zone
+        max_integral_degrees=15.0,  # More aggressive correction
+        feedforward_lookahead_points=7,  # Look further ahead
+    )
 
-    # # Step 6: Create the integrated controller
-    # integrated_controller = Phase2Controller(
-    #     lattice_planner=lattice_planner,
-    #     pure_pursuit=pure_pursuit,
-    #     max_path_deviation=0.25,  # Tighter tolerance for racing
-    #     replan_interval=1.5,  # Faster replanning
-    #     emergency_deviation=0.6,  # Emergency threshold
-    # )
+    # Step 6: Create the integrated controller
+    integrated_controller = Phase2Controller(
+        lattice_planner=lattice_planner,
+        pure_pursuit=pure_pursuit,
+        max_path_deviation=0.25,  # Tighter tolerance for racing
+        replan_interval=1.5,  # Faster replanning
+        emergency_deviation=0.6,  # Emergency threshold
+    )
 
-    # # Step 7: Set the planned trajectory
-    # integrated_controller.set_planned_trajectory(
-    #     command_sequence, (start_pose.x, start_pose.y, start_pose.theta)
-    # )
+    # Step 7: Set the planned trajectory
+    integrated_controller.set_planned_trajectory(
+        command_sequence, (start_pose.x, start_pose.y, start_pose.theta)
+    )
 
-    # print("=== READY FOR PHASE 2 EXECUTION ===")
-    # return integrated_controller
+    print("=== READY FOR PHASE 2 EXECUTION ===")
+    return integrated_controller
 
 
 def execute_phase2(simulation, integrated_controller):
