@@ -91,6 +91,7 @@ class DiscreteLatticeMotionPlanner:
         reference_point: str = "rear",
         primitive_duration: float = 0.5,
         num_angle_discretizations: int = 64,  # Increased for smoother paths
+        heading_alignment_weight: float = 0.3,  # Phase 1: Heading alignment parameter
     ):
         """
         Initialize the discrete motion planner
@@ -102,6 +103,7 @@ class DiscreteLatticeMotionPlanner:
         wheelbase: Distance between axles (m)
         primitive_duration: Duration of each motion primitive (s)
         num_angle_discretizations: Number of discrete heading angles
+        heading_alignment_weight: Weight for heading alignment in heuristic
         """
         self.grid = occupancy_grid
         self.angular_velocity = angular_velocity
@@ -131,6 +133,9 @@ class DiscreteLatticeMotionPlanner:
         # Goal tolerance - tightened for precise goal reaching
         self.goal_tolerance = 1  # grid cells - much tighter tolerance
         self.goal_theta_tolerance = self.num_angles  # angle indices - tighter tolerance
+
+        # Phase 1: Heading alignment parameters
+        self.heading_alignment_weight = heading_alignment_weight
 
         # Precomputed motion primitives
         self.motion_primitives = {}
@@ -233,6 +238,11 @@ class DiscreteLatticeMotionPlanner:
 
         start_time = time.time()
 
+        # Store goal for heuristic calculation
+        self.goal_x = goal_x
+        self.goal_y = goal_y
+        self.goal_theta = goal_theta
+
         # Discretize start and goal
         start_continuous = ContinuousState(start_x, start_y, start_theta)
         start_discrete = self._discretize_state(start_x, start_y, start_theta)
@@ -249,7 +259,7 @@ class DiscreteLatticeMotionPlanner:
             parent_node=None,
             primitive_used=None,
             g_score=0.0,
-            f_score=self._heuristic(start_x, start_y, goal_x, goal_y),
+            f_score=self._heuristic(start_x, start_y, start_theta, goal_x, goal_y),
         )
 
         # A* search setup
@@ -357,8 +367,10 @@ class DiscreteLatticeMotionPlanner:
                         )
                         world_trajectory.append((x_world, y_world, theta_world))
 
-                    # Create new search node
-                    h_score = self._heuristic(next_x, next_y, goal_x, goal_y)
+                    # Create new search node - Phase 1: Include theta in heuristic
+                    h_score = self._heuristic(
+                        next_x, next_y, next_theta, goal_x, goal_y
+                    )
                     f_score = tentative_g + h_score
 
                     next_node = SearchNode(
@@ -550,14 +562,37 @@ class DiscreteLatticeMotionPlanner:
 
         return True
 
-    def _heuristic(self, x: float, y: float, goal_x: float, goal_y: float) -> float:
-        """Combined Euclidean and Manhattan distance heuristic"""
-        dx = abs(goal_x - x)
-        dy = abs(goal_y - y)
-        # Combine both metrics for better path finding
-        euclidean = np.sqrt(dx * dx + dy * dy)
-        manhattan = dx + dy
-        return 0.6 * euclidean + 0.4 * manhattan
+    def _heuristic(
+        self, x: float, y: float, theta: float, goal_x: float, goal_y: float
+    ) -> float:
+        """
+        Phase 1: Enhanced heuristic with heading alignment
+        Combines distance and heading alignment to encourage "angle first, then go straight" behavior
+        """
+        # Distance component
+        dx = goal_x - x
+        dy = goal_y - y
+        distance = np.sqrt(dx * dx + dy * dy)
+
+        # Heading alignment component
+        if distance > 1e-6:  # Avoid division by zero
+            desired_heading = np.arctan2(dy, dx)
+            heading_error = abs(theta - desired_heading)
+            # Handle wrap-around (shortest angular distance)
+            heading_error = min(heading_error, 2 * np.pi - heading_error)
+
+            # Alignment penalty: larger when far from goal and misaligned
+            alignment_penalty = heading_error * distance * self.heading_alignment_weight
+        else:
+            alignment_penalty = 0.0
+
+        # Combined heuristic
+        euclidean = 0.6 * distance
+        manhattan = 0.4 * (abs(dx) + abs(dy))
+
+        total_heuristic = euclidean + manhattan + alignment_penalty
+
+        return total_heuristic
 
     def execute_command_sequence(
         self, car, command_sequence: List[DiscreteMotionPrimitive]
@@ -719,14 +754,14 @@ class DiscreteLatticeMotionPlanner:
         if ax is not None:
             ax.set_xlabel("X (m)")
             ax.set_ylabel("Y (m)")
-            ax.set_title("Discrete Command Sequence Visualization")
+            ax.set_title("Phase 1: Heading-Aware Path Planning")
             ax.legend()
             ax.grid(True)
             ax.axis("equal")
         else:
             plt.xlabel("X (m)")
             plt.ylabel("Y (m)")
-            plt.title("Discrete Command Sequence Visualization")
+            plt.title("Phase 1: Heading-Aware Path Planning")
             plt.legend()
             plt.grid(True)
             plt.axis("equal")
@@ -864,6 +899,9 @@ def phase2_discrete_planning(
             start_pose.x,
             start_pose.y,
             start_pose.theta,
+            goal_pose.x,
+            goal_pose.y,
+            goal_pose.theta,
             ax,
         )
 
