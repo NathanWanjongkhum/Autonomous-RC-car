@@ -18,16 +18,13 @@ class SteeringCommand(Enum):
 
 @dataclass
 class DiscreteMotionPrimitive:
-    """
-    Represents a motion primitive for discrete control
-    Each primitive is a fixed-duration execution of a steering command
-    """
-
     steering_command: SteeringCommand
-    duration: float  # How long to execute this command
-    trajectory: List[Tuple[float, float, float]]  # Resulting trajectory
-    end_displacement: Tuple[float, float, float]  # (dx, dy, dtheta) from start
-    cost: float  # Cost of executing this primitive
+    duration: float
+    trajectory: List[Tuple[float, float, float]]
+    end_displacement: Tuple[float, float, float]
+    cost: float
+    angular_change: float = 0.0
+    turn_direction: str = "straight"
 
 
 @dataclass
@@ -91,8 +88,9 @@ class DiscreteLatticeMotionPlanner:
         reference_point: str = "rear",
         primitive_duration: float = 0.5,
         num_angle_discretizations: int = 64,  # Increased for smoother paths
-        heading_alignment_weight: float = 0.3,  # Phase 1: Heading alignment parameter
-        straightness_bonus: float = -0.3,  # Phase 2: Bonus for consecutive straight motions
+        heading_alignment_weight: float = 0.3,  # Heading alignment parameter
+        straightness_bonus: float = -0.3,  # Bonus for consecutive straight motions
+        goal_alignment_threshold: float = 0.3,
     ):
         """
         Initialize the discrete motion planner
@@ -134,6 +132,10 @@ class DiscreteLatticeMotionPlanner:
         # Goal tolerance - tightened for precise goal reaching
         self.goal_tolerance = 1  # grid cells - much tighter tolerance
         self.goal_theta_tolerance = self.num_angles  # angle indices - tighter tolerance
+
+        self.helpful_turn_penalty: float = 0.5  # Penalty for turns toward goal
+        self.harmful_turn_penalty: float = 10.0  # Penalty for turns away from goal
+        self.goal_alignment_threshold = goal_alignment_threshold
 
         # Heading alignment parameters
         self.heading_alignment_weight = heading_alignment_weight
@@ -202,6 +204,16 @@ class DiscreteLatticeMotionPlanner:
                 else:
                     cost = distance * 1.5  # Penalize turns slightly
 
+                # Calculate turn characteristics
+                angular_change = abs(
+                    end_displacement[2]
+                )  # How much the heading changes
+                turn_direction = (
+                    "straight"
+                    if steering_cmd == SteeringCommand.NEUTRAL
+                    else ("left" if steering_cmd == SteeringCommand.LEFT else "right")
+                )
+
                 # Create primitive
                 primitive = DiscreteMotionPrimitive(
                     steering_command=steering_cmd,
@@ -209,6 +221,8 @@ class DiscreteLatticeMotionPlanner:
                     trajectory=trajectory,
                     end_displacement=end_displacement,
                     cost=cost,
+                    angular_change=angular_change,
+                    turn_direction=turn_direction,
                 )
 
                 self.motion_primitives[angle_idx][steering_cmd] = primitive
@@ -344,8 +358,33 @@ class DiscreteLatticeMotionPlanner:
                 if next_discrete_state in closed_set:
                     continue
 
-                # Calculate cost
-                tentative_g = current_node.g_score + primitive.cost
+                # Calculate adaptive turn penalty based on goal direction
+                goal_direction = self.calculate_goal_direction(
+                    current_node.continuous_pose.x, current_node.continuous_pose.y
+                )
+
+                new_theta = (
+                    current_node.continuous_pose.theta + primitive.end_displacement[2]
+                )
+
+                if primitive.steering_command == SteeringCommand.NEUTRAL:
+                    turn_penalty = 1.0  # No penalty for straight
+                    helpfulness = "neutral"
+                else:
+                    helpfulness = self.evaluate_turn_helpfulness(
+                        current_node.continuous_pose.theta, goal_direction, new_theta
+                    )
+
+                    if helpfulness == "helpful":
+                        turn_penalty = self.helpful_turn_penalty
+                    elif helpfulness == "harmful":
+                        turn_penalty = self.harmful_turn_penalty
+                    else:
+                        turn_penalty = 1.5  # Default turn penalty
+
+                # Apply adaptive penalty to base cost
+                base_cost = primitive.cost * turn_penalty
+                tentative_g = current_node.g_score + base_cost
 
                 # Apply straightness bonus for consecutive NEUTRAL steering
                 if (
@@ -356,14 +395,6 @@ class DiscreteLatticeMotionPlanner:
                 ):
                     # Apply bonus for consecutive straight motions
                     tentative_g += self.straightness_bonus
-
-                # Add switching penalty if changing steering direction
-                if (
-                    current_node.primitive_used is not None
-                    and current_node.primitive_used.steering_command
-                    != primitive.steering_command
-                ):
-                    tentative_g += 0.5  # Small penalty for switching
 
                 # Add switching penalty if changing steering direction
                 if (
@@ -582,6 +613,19 @@ class DiscreteLatticeMotionPlanner:
 
         return True
 
+    def _angular_difference(self, angle1: float, angle2: float) -> float:
+        """
+        Calculate the shortest angular difference between two angles.
+        Returns a value between -π and π.
+        """
+        diff = angle2 - angle1
+        # Normalize to [-π, π]
+        while diff > np.pi:
+            diff -= 2 * np.pi
+        while diff < -np.pi:
+            diff += 2 * np.pi
+        return diff
+
     def _heuristic(
         self, x: float, y: float, theta: float, goal_x: float, goal_y: float
     ) -> float:
@@ -613,6 +657,27 @@ class DiscreteLatticeMotionPlanner:
         total_heuristic = euclidean + manhattan + alignment_penalty
 
         return total_heuristic
+
+    def calculate_goal_direction(self, current_x: float, current_y: float) -> float:
+        """Calculate the direction from current position to goal"""
+        dx = self.goal_x - current_x
+        dy = self.goal_y - current_y
+        return np.arctan2(dy, dx)
+
+    def evaluate_turn_helpfulness(
+        self, current_theta: float, goal_direction: float, new_theta: float
+    ) -> str:
+        """Determine if a turn moves toward or away from goal alignment"""
+        # Calculate angular differences (handling wrap-around)
+        current_error = abs(self._angular_difference(current_theta, goal_direction))
+        new_error = abs(self._angular_difference(new_theta, goal_direction))
+
+        if new_error < current_error - self.goal_alignment_threshold:
+            return "helpful"  # Turn reduces misalignment
+        elif new_error > current_error + self.goal_alignment_threshold:
+            return "harmful"  # Turn increases misalignment
+        else:
+            return "neutral"  # Minimal change in alignment
 
     def execute_command_sequence(
         self, car, command_sequence: List[DiscreteMotionPrimitive]
