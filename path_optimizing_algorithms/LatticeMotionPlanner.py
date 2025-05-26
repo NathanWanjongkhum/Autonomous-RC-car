@@ -92,6 +92,7 @@ class DiscreteLatticeMotionPlanner:
         primitive_duration: float = 0.5,
         num_angle_discretizations: int = 64,  # Increased for smoother paths
         heading_alignment_weight: float = 0.3,  # Phase 1: Heading alignment parameter
+        straightness_bonus: float = -0.3,  # Phase 2: Bonus for consecutive straight motions
     ):
         """
         Initialize the discrete motion planner
@@ -134,9 +135,10 @@ class DiscreteLatticeMotionPlanner:
         self.goal_tolerance = 1  # grid cells - much tighter tolerance
         self.goal_theta_tolerance = self.num_angles  # angle indices - tighter tolerance
 
-        # Phase 1: Heading alignment parameters
+        # Heading alignment parameters
         self.heading_alignment_weight = heading_alignment_weight
-
+        # Straightness bonus parameters
+        self.straightness_bonus = straightness_bonus
         # Precomputed motion primitives
         self.motion_primitives = {}
         self._generate_motion_primitives()
@@ -344,6 +346,24 @@ class DiscreteLatticeMotionPlanner:
 
                 # Calculate cost
                 tentative_g = current_node.g_score + primitive.cost
+
+                # Apply straightness bonus for consecutive NEUTRAL steering
+                if (
+                    current_node.primitive_used is not None
+                    and current_node.primitive_used.steering_command
+                    == SteeringCommand.NEUTRAL
+                    and primitive.steering_command == SteeringCommand.NEUTRAL
+                ):
+                    # Apply bonus for consecutive straight motions
+                    tentative_g += self.straightness_bonus
+
+                # Add switching penalty if changing steering direction
+                if (
+                    current_node.primitive_used is not None
+                    and current_node.primitive_used.steering_command
+                    != primitive.steering_command
+                ):
+                    tentative_g += 0.5  # Small penalty for switching
 
                 # Add switching penalty if changing steering direction
                 if (
@@ -868,6 +888,7 @@ def phase2_discrete_planning(
         wheelbase=wheelbase,
         primitive_duration=primitive_duration,
         num_angle_discretizations=32,  # Increased angle discretization for smoother paths
+        straightness_bonus=-0.3,  # Add straightness bonus
     )
 
     # Plan the command sequence

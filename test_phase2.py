@@ -128,8 +128,8 @@ def test_phase2() -> None:
     # Initialize the occupancy grid
     print("=== TESTING PHASE 2 ===")
     print("=== PHASE 2: RACING LINE OPTIMIZATION ===")
-    grid_width = 5
-    grid_height = 5
+    grid_width = 20
+    grid_height = 20
     grid, start_pose, goal_pose = generate_grid(grid_width, grid_height, "corridor")
 
     car = AckermannSteeringCar(x=0.5, y=0.5, theta=0.0)
@@ -169,7 +169,7 @@ def transition_to_phase2(simulation):
 
     # For demonstration, let's set a goal position
     # In practice, this might be the finish line or a lap completion point
-    goal_pose = Pose(x=4.5, y=4.5, theta=0.0)  # Adjust based on your track
+    goal_pose = Pose(x=19.5, y=19.5, theta=0.0)  # Adjust based on your track
 
     print(f"Planning from {start_pose} to {goal_pose}")
     fig, ax = plt.subplots(1, 1, figsize=(12, 10))
