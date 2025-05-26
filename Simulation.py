@@ -37,9 +37,6 @@ class Simulation:
         else:
             self.car = car
 
-        # Create the APF controller for exploration
-        self.explorer = APF(self.car, self.grid)
-
         # Simulation parameters
         self.dt = 0.1  # Time step in seconds
         self.max_steps = 1000  # Maximum simulation steps

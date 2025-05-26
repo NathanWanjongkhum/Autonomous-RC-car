@@ -1,14 +1,20 @@
 from dataclasses import dataclass
+import time
+from Phase2Controller import Phase2Controller
+from Simulation import Simulation
 from maps.OccupancyGrid import OccupancyGrid
 import matplotlib.pyplot as plt
 import matplotlib.style as mplstyle
+
+from pathfinding_algorithms.ConstantPPC import ConstantPurePursuitController
+from robots.AckermannSteeringCar import AckermannSteeringCar
 
 mplstyle.use(["dark_background", "fast"])
 
 
 from path_optimizing_algorithms.LatticeMotionPlanner import (
+    DiscreteLatticeMotionPlanner,
     apply_motion_primitive,
-    phase2_discrete_planning,
 )
 import numpy as np
 
@@ -120,38 +126,82 @@ def test_phase2() -> None:
     # So we can use A* search on a lattice of possible states
 
     # Initialize the occupancy grid
+    print("=== TESTING PHASE 2 ===")
+    print("=== PHASE 2: RACING LINE OPTIMIZATION ===")
     grid_width = 5
     grid_height = 5
-    occupancy_grid, start_pose, goal_pose = generate_grid(
-        grid_width, grid_height, "corridor"
+    grid, start_pose, goal_pose = generate_grid(grid_width, grid_height, "corridor")
+
+    car = AckermannSteeringCar(x=0.5, y=0.5, theta=0.0)
+
+    sim = Simulation(car=car, grid=grid)
+
+    # Intermediate Phase: Planning
+    integrated_controller = transition_to_phase2(sim)
+
+    # if integrated_controller:
+    #     # Phase 2: Execution
+    #     execute_phase2(sim, integrated_controller)
+    # else:
+    #     print("Phase 2 planning failed!")
+
+
+def transition_to_phase2(simulation):
+    """
+    Transition from Phase 1 exploration to Phase 2 execution
+
+    This function handles the intermediate processing phase where we:
+    1. Process the explored map
+    2. Plan the optimal trajectory
+    3. Set up the integrated controller
+    """
+    print("=== INTERMEDIATE PHASE: PROCESSING AND PLANNING ===")
+
+    # Step 1: Process the occupancy grid from exploration
+    print("Processing occupancy grid...")
+    simulation.grid.process_map()  # Clean up noise from exploration
+
+    # Step 2: Define start and goal for Phase 2
+    # In a real competition, this might be the same start/finish line
+    start_pose = Pose(
+        x=simulation.car.x, y=simulation.car.y, theta=simulation.car.theta
     )
 
-    # After Phase 1 exploration
-    # occupancy_grid.process_map()  # Clean up noise
+    # For demonstration, let's set a goal position
+    # In practice, this might be the finish line or a lap completion point
+    goal_pose = Pose(x=4.5, y=4.5, theta=0.0)  # Adjust based on your track
 
+    print(f"Planning from {start_pose} to {goal_pose}")
     fig, ax = plt.subplots(1, 1, figsize=(12, 10))
 
-    print(
-        f"Occupancy grid width: {occupancy_grid.width}, height: {occupancy_grid.height}"
-    )
-    print(
-        f"Occupancy grid grid_width: {occupancy_grid.grid_width}, grid_height: {occupancy_grid.grid_height}"
-    )
-
-    # Optimize for racing
-    # Configure planner with optimized parameters
-    planner = phase2_discrete_planning(
-        occupancy_grid,
-        start_pose,
-        goal_pose,
-        ax=ax,
-        primitive_duration=0.5,  # Short duration for precise control
-        steering_angles=30,  # Moderate steering angle for balance of maneuverability and smoothness
-        angular_velocity=0.8,  # Increased angular velocity for better turning
-        wheelbase=0.3,  # Slightly larger wheelbase for stability
+    # Step 3: Create and configure the lattice planner
+    lattice_planner = DiscreteLatticeMotionPlanner(
+        occupancy_grid=simulation.grid,
+        angular_velocity=0.8,  # Faster for Phase 2
+        steering_angle_left=30,  # Degrees
+        steering_angle_right=-30,
+        wheelbase=0.25,
+        primitive_duration=0.4,  # Shorter for more responsive control
+        num_angle_discretizations=32,  # Higher resolution for smoother paths
     )
 
-    if planner and planner.command_sequence:
+    # Step 4: Plan the optimal trajectory
+    print("Planning optimal trajectory...")
+    command_sequence = lattice_planner.plan_discrete_path(
+        start_pose.x,
+        start_pose.y,
+        start_pose.theta,
+        goal_pose.x,
+        goal_pose.y,
+        goal_pose.theta,
+        timeout=60.0,  # Allow more time for complex paths
+    )
+
+    if not command_sequence:
+        print("ERROR: Could not find path for Phase 2!")
+        return None
+
+    if command_sequence:
         # Extract trajectory from command sequence
         trajectory = []
         current_x, current_y, current_theta = (
@@ -160,7 +210,7 @@ def test_phase2() -> None:
             start_pose.theta,
         )
 
-        for primitive in planner.command_sequence:
+        for primitive in command_sequence:
             # Transform each point in the primitive's trajectory to world coordinates
             for x_local, y_local, theta_local in primitive.trajectory:
                 # Transform from primitive's local frame to world frame
@@ -176,23 +226,118 @@ def test_phase2() -> None:
                 (current_x, current_y, current_theta), primitive.end_displacement
             )
 
-            # Update trajectory in VisualizationManager
-            # trajectory_drawer = vis_manager.get_element("trajectory")
-            # if trajectory_drawer and isinstance(trajectory_drawer, TrajectoryDrawer):
-            # print(f"Trajectory: {trajectory}")
-            # print(f"TrajectoryDrawer: {trajectory_drawer}")
-            # trajectory_drawer.set_positions(trajectory)
-
-        planner.visualize_explored_states(ax=ax)
-        plt.show()
+        lattice_planner.visualize_command_sequence(
+            start_x=start_pose.x,
+            start_y=start_pose.y,
+            start_theta=start_pose.theta,
+            goal_x=goal_pose.x,
+            goal_y=goal_pose.y,
+            goal_theta=goal_pose.theta,
+            ax=ax,
+        )
+        lattice_planner.visualize_explored_states(ax=ax)
+        plt.show(block=True)
         print("Displaying occupancy grid and markers. Close the plot to continue.")
-
-        # print("Path found and visualized by LatticeMotionPlanner.")
-
     else:
         print("No path found by LatticeMotionPlanner.")
         print("Visualizing explored states...")
-        # planner_instance.visualize_explored_states(ax=ax)
+
+    print(f"Found optimal path with {len(command_sequence)} commands")
+
+    # Step 5: Create the pure pursuit controller
+    # pure_pursuit = ConstantPurePursuitController(
+    #     angular_velocity=0.8,  # Match lattice planner
+    #     base_lookahead=0.6,  # Larger lookahead for higher speeds
+    #     hysteresis_threshold=5.0,  # Tighter for precision
+    #     dead_zone_threshold=2.0,  # Smaller dead zone
+    #     max_integral_degrees=15.0,  # More aggressive correction
+    #     feedforward_lookahead_points=7,  # Look further ahead
+    # )
+
+    # # Step 6: Create the integrated controller
+    # integrated_controller = Phase2Controller(
+    #     lattice_planner=lattice_planner,
+    #     pure_pursuit=pure_pursuit,
+    #     max_path_deviation=0.25,  # Tighter tolerance for racing
+    #     replan_interval=1.5,  # Faster replanning
+    #     emergency_deviation=0.6,  # Emergency threshold
+    # )
+
+    # # Step 7: Set the planned trajectory
+    # integrated_controller.set_planned_trajectory(
+    #     command_sequence, (start_pose.x, start_pose.y, start_pose.theta)
+    # )
+
+    # print("=== READY FOR PHASE 2 EXECUTION ===")
+    # return integrated_controller
+
+
+def execute_phase2(simulation, integrated_controller):
+    """
+    Execute Phase 2 with the integrated controller
+    """
+    print("=== PHASE 2: HIGH-SPEED EXECUTION ===")
+
+    # Reset car to starting position
+    start_x, start_y = integrated_controller.reference_trajectory[0]
+    simulation.car.x = start_x
+    simulation.car.y = start_y
+    simulation.car.theta = 0.0
+    simulation.car.v = 0.0
+
+    # Initialize visualization if needed
+    if not simulation.fig:
+        simulation.initialize_visualization()
+
+    dt = 0.05  # Faster control loop for Phase 2
+    max_steps = 2000
+    step = 0
+
+    while step < max_steps:
+        current_time = time.time()
+        current_pose = (simulation.car.x, simulation.car.y, simulation.car.theta)
+
+        # Get control commands from integrated controller
+        steering_angle, linear_velocity = integrated_controller.compute_steering(
+            current_pose, current_time, dt
+        )
+
+        # Apply control commands
+        simulation.car.set_control_inputs(linear_velocity, steering_angle)
+        simulation.car.update_state(dt)
+
+        # Update visualization every few steps
+        if step % 10 == 0:
+            simulation.update_visualization()
+
+            # Print performance metrics
+            metrics = integrated_controller.get_performance_metrics()
+            print(
+                f"Step {step}: Mode={metrics.get('current_mode', 'unknown')}, "
+                f"Deviation={metrics.get('mean_deviation', 0):.3f}m, "
+                f"Progress={metrics.get('primitive_progress', 0)*100:.1f}%"
+            )
+
+        # Check completion conditions
+        if metrics.get("primitive_progress", 0) >= 0.95:
+            print("Phase 2 execution completed!")
+            break
+
+        # Emergency stop check
+        if metrics.get("max_deviation", 0) > integrated_controller.emergency_deviation:
+            print("Emergency stop triggered!")
+            break
+
+        step += 1
+        time.sleep(dt)  # Maintain real-time execution
+
+    # Show final performance
+    integrated_controller.visualize_performance()
+    final_metrics = integrated_controller.get_performance_metrics()
+
+    print("=== PHASE 2 PERFORMANCE SUMMARY ===")
+    for key, value in final_metrics.items():
+        print(f"{key}: {value}")
 
 
 if __name__ == "__main__":

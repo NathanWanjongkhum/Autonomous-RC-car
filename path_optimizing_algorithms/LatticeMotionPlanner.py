@@ -130,7 +130,7 @@ class DiscreteLatticeMotionPlanner:
 
         # Goal tolerance - tightened for precise goal reaching
         self.goal_tolerance = 1  # grid cells - much tighter tolerance
-        self.goal_theta_tolerance = 2  # angle indices - tighter tolerance
+        self.goal_theta_tolerance = self.num_angles  # angle indices - tighter tolerance
 
         # Precomputed motion primitives
         self.motion_primitives = {}
@@ -293,7 +293,8 @@ class DiscreteLatticeMotionPlanner:
                 and dtheta <= self.goal_theta_tolerance
             ):
                 print(f"GOAL REACHED! Nodes explored: {nodes_explored}")
-                return self._reconstruct_connectivity_preserving_path(current_node)
+                self.command_sequence = self._reconstruct_path(current_node)
+                return self.command_sequence
 
             # If current state is already closed, skip
             if current_node.discrete_pose in closed_set:
@@ -377,9 +378,7 @@ class DiscreteLatticeMotionPlanner:
         print("No path found within timeout")
         return None
 
-    def _reconstruct_connectivity_preserving_path(
-        self, goal_node: SearchNode
-    ) -> List[DiscreteMotionPrimitive]:
+    def _reconstruct_path(self, goal_node: SearchNode) -> List[DiscreteMotionPrimitive]:
         """
         Reconstruct the sequence of motion primitives with guaranteed connectivity
         """
@@ -560,38 +559,6 @@ class DiscreteLatticeMotionPlanner:
         manhattan = dx + dy
         return 0.6 * euclidean + 0.4 * manhattan
 
-    def _reconstruct_command_sequence(
-        self,
-        current_node: SearchNode,
-    ) -> List[DiscreteMotionPrimitive]:
-        """Reconstruct the sequence of motion primitives"""
-        sequence = []
-        current = current_node.discrete_pose
-
-        # Debug info
-        print(f"Reconstructing path from state {current}")
-
-        while current_node.parent_node is not None:
-            parent_node = current_node.parent_node
-            primitive = parent_node.primitive_used
-            print(f"Current state: {parent_node.discrete_pose} ")
-
-            if primitive is not None:
-                sequence.append(primitive)
-                # print(f"Added primitive: {primitive.steering_command.value}")
-            # else:
-            # print("Warning: No primitive for this state transition")
-
-            if parent_node.discrete_pose == current:
-                print("Warning: Parent state equals current state")
-                break
-
-            current = parent_node.discrete_pose
-
-        sequence.reverse()
-
-        return sequence
-
     def execute_command_sequence(
         self, car, command_sequence: List[DiscreteMotionPrimitive]
     ):
@@ -621,6 +588,9 @@ class DiscreteLatticeMotionPlanner:
         start_x: float,
         start_y: float,
         start_theta: float,
+        goal_x: float,
+        goal_y: float,
+        goal_theta: float,
         ax=None,
     ):
         """Visualize the planned command sequence"""
@@ -704,7 +674,7 @@ class DiscreteLatticeMotionPlanner:
 
             # Approximate the goal zone with a circle
             circle = plt.Circle(
-                (self.goal_pose[0], self.goal_pose[1]),
+                (goal_x, goal_y),
                 radius=marker_transform,
                 color="blue",
                 fill=True,
