@@ -83,9 +83,13 @@ class APF:
         # First subplot: Heading angles
         self.axs[0].set_title("Heading Angles")
         self.axs[0].set_ylabel("Angle (radians)")
+        self.axs[0].set_title("Heading Angles")
+        self.axs[0].set_ylabel("Angle (radians)")
         self.axs[0].grid(True)
 
         # Second subplot: Heading error
+        self.axs[1].set_title("Heading Error")
+        self.axs[1].set_ylabel("Error (radians)")
         self.axs[1].set_title("Heading Error")
         self.axs[1].set_ylabel("Error (radians)")
         self.axs[1].grid(True)
@@ -127,6 +131,7 @@ class APF:
     def save_plots(self, filename="apf_performance.png"):
         """Save the current plots to a file"""
         plt.figure(self.fig.number)
+        plt.savefig(filename, dpi=300, bbox_inches="tight")
         plt.savefig(filename, dpi=300, bbox_inches="tight")
         print(f"Plots saved to {filename}")
 
@@ -209,6 +214,8 @@ class APF:
         # Define probability thresholds
         free_threshold = 0.4  # Cells with p < 0.4 are considered free
         occ_threshold = 0.6  # Cells with p > 0.6 are considered occupied
+        free_threshold = 0.4  # Cells with p < 0.4 are considered free
+        occ_threshold = 0.6  # Cells with p > 0.6 are considered occupied
         # Values between are considered unknown/uncertain
 
         # Create masks based on probability thresholds
@@ -219,6 +226,8 @@ class APF:
         # Combined grid for visualization
         combined_grid = np.zeros_like(self.grid.grid)
         combined_grid[free_space == 1] = 1  # Free space
+        combined_grid[unknown == 1] = 2  # Unknown
+        combined_grid[obstacle == 1] = 3  # Obstacle
         combined_grid[unknown == 1] = 2  # Unknown
         combined_grid[obstacle == 1] = 3  # Obstacle
 
@@ -262,7 +271,13 @@ class APF:
             np.uint8
         )  # Everything else is unknown
 
+        unknown = (~(free_space | obstacle)).astype(
+            np.uint8
+        )  # Everything else is unknown
+
         # First row: Display binary masks
+        axs[0, 0].imshow(free_space, cmap="binary")
+        axs[0, 0].set_title("Free Space (p < 0.4)")
         axs[0, 0].imshow(free_space, cmap="binary")
         axs[0, 0].set_title("Free Space (p < 0.4)")
         axs[0, 0].set_xticks([])
@@ -270,9 +285,13 @@ class APF:
 
         axs[0, 1].imshow(unknown, cmap="binary")
         axs[0, 1].set_title("Unknown (0.4 <= p <= 0.6)")
+        axs[0, 1].imshow(unknown, cmap="binary")
+        axs[0, 1].set_title("Unknown (0.4 <= p <= 0.6)")
         axs[0, 1].set_xticks([])
         axs[0, 1].set_yticks([])
 
+        axs[0, 2].imshow(obstacle, cmap="binary")
+        axs[0, 2].set_title("Obstacle (p > 0.6)")
         axs[0, 2].imshow(obstacle, cmap="binary")
         axs[0, 2].set_title("Obstacle (p > 0.6)")
         axs[0, 2].set_xticks([])
@@ -283,8 +302,20 @@ class APF:
             self.grid.grid, cmap="plasma", vmin=0, vmax=1
         )
         axs[1, 0].set_title("Probability Grid")
+        probability_img = axs[1, 0].imshow(
+            self.grid.grid, cmap="plasma", vmin=0, vmax=1
+        )
+        axs[1, 0].set_title("Probability Grid")
         axs[1, 0].set_xticks([])
         axs[1, 0].set_yticks([])
+        fig.colorbar(
+            probability_img,
+            ax=axs[1, 0],
+            orientation="vertical",
+            fraction=0.046,
+            pad=0.04,
+        )
+
         fig.colorbar(
             probability_img,
             ax=axs[1, 0],
@@ -300,7 +331,12 @@ class APF:
         combined_grid[obstacle == 1] = 3  # Obstacle
 
         cmap = ListedColormap(["black", "white", "gray", "red"])
+        combined_grid[unknown == 1] = 2  # Unknown
+        combined_grid[obstacle == 1] = 3  # Obstacle
+
+        cmap = ListedColormap(["black", "white", "gray", "red"])
         axs[1, 1].imshow(combined_grid, cmap=cmap)
+        axs[1, 1].set_title("Thresholded Grid")
         axs[1, 1].set_title("Thresholded Grid")
         axs[1, 1].set_xticks([])
         axs[1, 1].set_yticks([])
@@ -313,11 +349,15 @@ class APF:
         free_dilated = cv2.dilate(free_space, kernel, iterations=1)
         axs[1, 2].imshow(free_dilated, cmap="binary")
         axs[1, 2].set_title("Dilated Free Space")
+        axs[1, 2].imshow(free_dilated, cmap="binary")
+        axs[1, 2].set_title("Dilated Free Space")
         axs[1, 2].set_xticks([])
         axs[1, 2].set_yticks([])
 
         # Frontier cells: where dilated free space meets unknown
         frontier_cells = free_dilated & unknown
+        axs[2, 0].imshow(frontier_cells, cmap="binary")
+        axs[2, 0].set_title("Frontier Cells")
         axs[2, 0].imshow(frontier_cells, cmap="binary")
         axs[2, 0].set_title("Frontier Cells")
         axs[2, 0].set_xticks([])
@@ -329,8 +369,11 @@ class APF:
         # Random colormap for the labels
         label_cmap = plt.colormaps["coolwarm"].resampled(10)
 
+        label_cmap = plt.colormaps["coolwarm"].resampled(10)
+
         # Show labeled regions
         axs[2, 1].imshow(labels, cmap=label_cmap)
+        axs[2, 1].set_title(f"Labeled Frontiers ({num_labels-1} regions)")
         axs[2, 1].set_title(f"Labeled Frontiers ({num_labels-1} regions)")
         axs[2, 1].set_xticks([])
         axs[2, 1].set_yticks([])
@@ -345,7 +388,12 @@ class APF:
                 axs[2, 1].plot(centroid[0], centroid[1], "wo", markersize=8)
                 axs[2, 1].plot(centroid[0], centroid[1], "ko", markersize=6)
 
+                axs[2, 1].plot(centroid[0], centroid[1], "wo", markersize=8)
+                axs[2, 1].plot(centroid[0], centroid[1], "ko", markersize=6)
+
         # Overlay frontiers on original grid
+        axs[2, 2].imshow(self.grid.grid, cmap="plasma", vmin=0, vmax=1)
+        axs[2, 2].set_title("Frontiers on Probability Grid")
         axs[2, 2].imshow(self.grid.grid, cmap="plasma", vmin=0, vmax=1)
         axs[2, 2].set_title("Frontiers on Probability Grid")
         axs[2, 2].set_xticks([])
@@ -353,6 +401,9 @@ class APF:
 
         # Mark frontiers on the probability grid
         for centroid in frontiers:
+            axs[2, 2].plot(centroid[0], centroid[1], "wo", markersize=8)
+            axs[2, 2].plot(centroid[0], centroid[1], "ko", markersize=6)
+
             axs[2, 2].plot(centroid[0], centroid[1], "wo", markersize=8)
             axs[2, 2].plot(centroid[0], centroid[1], "ko", markersize=6)
 
@@ -466,6 +517,9 @@ class APF:
         frontiers = self.detect_frontiers()
         if frontiers:
             # Find closest frontier
+            distances = [
+                np.hypot(self.car.x - f[0], self.car.y - f[1]) for f in frontiers
+            ]
             distances = [
                 np.hypot(self.car.x - f[0], self.car.y - f[1]) for f in frontiers
             ]
