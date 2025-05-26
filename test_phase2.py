@@ -15,6 +15,7 @@ mplstyle.use(["dark_background", "fast"])
 from path_optimizing_algorithms.LatticeMotionPlanner import (
     DiscreteLatticeMotionPlanner,
     apply_motion_primitive,
+    SteeringCommand,
 )
 import numpy as np
 
@@ -127,7 +128,7 @@ def test_phase2() -> None:
 
     # Initialize the occupancy grid
     print("=== TESTING PHASE 2 ===")
-    print("=== PHASE 2: RACING LINE OPTIMIZATION ===")
+    # print("=== PHASE 2: RACING LINE OPTIMIZATION ===")
     grid_width = 20
     grid_height = 20
     grid, start_pose, goal_pose = generate_grid(grid_width, grid_height, "corridor")
@@ -156,6 +157,8 @@ def transition_to_phase2(simulation):
     3. Set up the integrated controller
     """
     print("=== INTERMEDIATE PHASE: PROCESSING AND PLANNING ===")
+
+    start_time = time.time()
 
     # Step 1: Process the occupancy grid from exploration
     print("Processing occupancy grid...")
@@ -235,14 +238,44 @@ def transition_to_phase2(simulation):
             goal_theta=goal_pose.theta,
             ax=ax,
         )
+
         lattice_planner.visualize_explored_states(ax=ax)
+
+        # Save tuning parameters to a file
+        tuning_params = {
+            "angular_velocity": lattice_planner.angular_velocity,
+            "steering_angle_left": lattice_planner.steering_angles[
+                SteeringCommand.LEFT
+            ],
+            "steering_angle_right": lattice_planner.steering_angles[
+                SteeringCommand.RIGHT
+            ],
+            "wheelbase": lattice_planner.wheelbase,
+            "primitive_duration": lattice_planner.primitive_duration,
+            "num_angle_discretizations": lattice_planner.num_angles,
+        }
+        filename = "saved_simulations/tuning_params.txt"
+        with open(filename, "w") as f:
+            for key, value in tuning_params.items():
+                f.write(f"{key}: {value}\n")
+
+            f.write(f"\nPath planning completed in {time.time() - start_time:.3f}s\n")
+            f.write(f"States explored: {lattice_planner.nodes_explored}\n")
+            f.write(f"Found optimal path with {len(command_sequence)} commands\n")
+            f.write(
+                f"Simulated time: {len(command_sequence) * lattice_planner.primitive_duration:.3f}s\n"
+            )
+
+        # Save the plot to a file
+        plot_filename = "saved_simulations/trajectory_plot.png"
+        fig.savefig(plot_filename)
+
         plt.show(block=True)
+
         print("Displaying occupancy grid and markers. Close the plot to continue.")
     else:
         print("No path found by LatticeMotionPlanner.")
         print("Visualizing explored states...")
-
-    print(f"Found optimal path with {len(command_sequence)} commands")
 
     # Step 5: Create the pure pursuit controller
     # pure_pursuit = ConstantPurePursuitController(

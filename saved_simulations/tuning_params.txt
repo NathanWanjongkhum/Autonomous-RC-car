@@ -1,0 +1,11 @@
+angular_velocity: 0.8
+steering_angle_left: 0.5235987755982988
+steering_angle_right: -0.5235987755982988
+wheelbase: 0.25
+primitive_duration: 0.4
+num_angle_discretizations: 32
+
+Path planning completed in 0.131s
+States explored: 142
+Found optimal path with 106 commands
+Simulated time: 42.400s

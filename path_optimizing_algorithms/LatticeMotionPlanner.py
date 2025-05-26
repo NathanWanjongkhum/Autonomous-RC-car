@@ -248,7 +248,7 @@ class DiscreteLatticeMotionPlanner:
         List of DiscreteMotionPrimitive objects representing the command sequence,
         or None if no path found
         """
-        print("=== CONNECTIVITY-PRESERVING A* SEARCH ===")
+        print("=== A* SEARCH ===")
         print(f"Start: ({start_x:.3f}, {start_y:.3f}, {start_theta:.3f})")
         print(f"Goal:  ({goal_x:.3f}, {goal_y:.3f}, {goal_theta:.3f})")
 
@@ -298,11 +298,11 @@ class DiscreteLatticeMotionPlanner:
             # Store explored state for visualization
             self.explored_states.append(current_node.continuous_pose)
 
-            print(
-                f"Exploring node {nodes_explored}: discrete={current_node.discrete_pose}, "
-                f"exact=({current_node.continuous_pose.x:.3f}, {current_node.continuous_pose.y:.3f}, "
-                f"{current_node.continuous_pose.theta:.3f})"
-            )
+            # print(
+            #     f"Exploring node {nodes_explored}: discrete={current_node.discrete_pose}, "
+            #     f"exact=({current_node.continuous_pose.x:.3f}, {current_node.continuous_pose.y:.3f}, "
+            #     f"{current_node.continuous_pose.theta:.3f})"
+            # )
 
             # Check if pose is close enough to goal
             dx = abs(current_node.discrete_pose[0] - goal_discrete[0])
@@ -319,6 +319,7 @@ class DiscreteLatticeMotionPlanner:
                 and dtheta <= self.goal_theta_tolerance
             ):
                 print(f"GOAL REACHED! Nodes explored: {nodes_explored}")
+                self.nodes_explored = nodes_explored
                 self.command_sequence = self._reconstruct_path(current_node)
                 return self.command_sequence
 
@@ -445,7 +446,7 @@ class DiscreteLatticeMotionPlanner:
         """
         Reconstruct the sequence of motion primitives with guaranteed connectivity
         """
-        print("=== RECONSTRUCTING CONNECTIVITY-PRESERVING PATH ===")
+        print("=== RECONSTRUCTING PATH ===")
 
         sequence = []
         trajectory_segments = []
@@ -467,11 +468,11 @@ class DiscreteLatticeMotionPlanner:
                 sequence.append(node.primitive_used)
                 trajectory_segments.append(node.trajectory_segment)
 
-                print(
-                    f"Segment {i+1}: {node.primitive_used.steering_command.value} "
-                    f"-> exact pose ({node.continuous_pose.x:.3f}, {node.continuous_pose.y:.3f}, "
-                    f"{node.continuous_pose.theta:.3f})"
-                )
+                # print(
+                #     f"Segment {i+1}: {node.primitive_used.steering_command.value} "
+                #     f"-> exact pose ({node.continuous_pose.x:.3f}, {node.continuous_pose.y:.3f}, "
+                #     f"{node.continuous_pose.theta:.3f})"
+                # )
 
         # Verify complete connectivity
         self._verify_path_connectivity(trajectory_segments)
@@ -513,8 +514,8 @@ class DiscreteLatticeMotionPlanner:
                     f"DISCONNECTION at segment {i}->{i+1}: "
                     f"distance={distance:.6f}m, dtheta={dtheta:.6f}rad"
                 )
-            else:
-                print(f"Segment {i}->{i+1}: CONNECTED (distance={distance:.8f}m)")
+            # else:
+            #     print(f"Segment {i}->{i+1}: CONNECTED (distance={distance:.8f}m)")
 
         if total_disconnections == 0:
             print("✓ PERFECT CONNECTIVITY: All segments perfectly connected!")
