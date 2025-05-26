@@ -1,9 +1,0 @@
-- [ ] Fix simulation
-    - Ideas:
-        - Obstacles may not be initialized or drawn correctly
-        - Path finder may not be working correctly
-        - Vision system may not be working correctly
-        - May need to define goal state
-    - Improve visualization
-        - Show path
-        - Show visited positions

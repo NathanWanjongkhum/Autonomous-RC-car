@@ -1,1 +1,7 @@
 *.pyc
+simulation_results/
+apf_performance_simple.png
+__pycache__/
+.venv/*
+.vscode/*
+.clinerules/

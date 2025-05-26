@@ -33,9 +33,10 @@ class OccupancyGrid:
         self.grid = np.ones((self.grid_height, self.grid_width)) * 0.5
 
         # Binary grid (for path planning) - 0 = free, 1 = occupied
-        # self.binary_grid = np.ones((self.grid_height, self.grid_width), dtype=bool) # Initialize as occupied
-        self.binary_grid = np.zeros((self.grid_height, self.grid_width), dtype=bool)  # Initialize as free
-        
+        self.binary_grid = np.zeros(
+            (self.grid_height, self.grid_width), dtype=bool
+        )  # Initialize as free
+
         # Log-odds representation for Bayesian updates
         # Log-odds representation makes probabilistic updates more efficient
         # log-odds = log(p/(1-p))
@@ -52,7 +53,7 @@ class OccupancyGrid:
         self.lo_occ = np.log(0.65 / 0.35)  # log-odds for occupied measurement
         self.lo_free = np.log(0.35 / 0.65)  # log-odds for free measurement
 
-    def world_to_grid(self, x, y):
+    def _discretize_state(self, x, y):
         """
         Convert world coordinates (meters) to grid cell indices
 
@@ -62,8 +63,8 @@ class OccupancyGrid:
         Returns:
         grid_x, grid_y: Grid cell indices
         """
-        grid_x = math.ceil(x / self.resolution)
-        grid_y = math.ceil(y / self.resolution)
+        grid_x = math.floor(x / self.resolution)
+        grid_y = math.floor(y / self.resolution)
 
         # Ensure within grid bounds
         grid_x = np.clip(grid_x, 0, self.grid_width - 1)
@@ -71,9 +72,9 @@ class OccupancyGrid:
 
         return grid_x, grid_y
 
-    def grid_to_world(self, grid_x, grid_y):
+    def _continuous_state(self, grid_x, grid_y):
         """
-        Convert grid cell indices to world coordinates (cell center)
+        Convert grid cell indices to world coordinates
 
         Parameters:
         grid_x, grid_y: Grid cell indices
@@ -95,7 +96,7 @@ class OccupancyGrid:
         Returns:
         bool: True if occupied, False otherwise
         """
-        grid_x, grid_y = self.world_to_grid(x, y)
+        grid_x, grid_y = self._discretize_state(x, y)
         return self.binary_grid[grid_y, grid_x]
 
     def update_cell(self, x, y, occupied):
@@ -106,7 +107,7 @@ class OccupancyGrid:
         x, y: World coordinates
         occupied: Boolean indicating if cell is observed as occupied
         """
-        grid_x, grid_y = self.world_to_grid(x, y)
+        grid_x, grid_y = self._discretize_state(x, y)
 
         # Update log-odds
         # This is the Bayesian update in log-odds form
@@ -208,7 +209,7 @@ class OccupancyGrid:
                 )
 
                 # Update cell with probability
-                grid_x, grid_y = self.world_to_grid(world_x, world_y)
+                grid_x, grid_y = self._discretize_state(world_x, world_y)
 
                 # Check if within grid bounds
                 if 0 <= grid_x < self.grid_width and 0 <= grid_y < self.grid_height:
