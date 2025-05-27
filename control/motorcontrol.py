@@ -1,7 +1,7 @@
 import RPi.GPIO as GPIO
 from time import sleep
 
-def motor_control_loop(command_queue, stop_event=None):
+def motor_control_loop(command_queue, stop_event):
     GPIO.setwarnings(False)
 
     # Right Motor
@@ -33,9 +33,7 @@ def motor_control_loop(command_queue, stop_event=None):
     GPIO.output(in3,GPIO.LOW)
 
     try:
-        while True:
-            if stop_event and stop_event.is_set():
-                break
+        while not stop_event.is_set():
             try:
                 command = command_queue.get(timeout=0.1)
             except Exception:
@@ -66,13 +64,14 @@ def motor_control_loop(command_queue, stop_event=None):
                 GPIO.output(in3,GPIO.LOW)
                 GPIO.output(in4,GPIO.LOW)
             elif command == 'stopall':
-                if stop_event:
-                    stop_event.set()
+                stop_event.set()
                 break
     except KeyboardInterrupt:
+        pass
+    finally:
         GPIO.cleanup()
         print("GPIO Clean up")
-    GPIO.cleanup()
+        pass
 
 if __name__ == '__main__':
     motor_control_loop()
