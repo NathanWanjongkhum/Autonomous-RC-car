@@ -5,13 +5,13 @@ def motor_control_loop(command_queue, stop_event):
     GPIO.setwarnings(False)
 
     # Right Motor
-    in1 = 27
-    in2 = 22
-    en_a = 4
+    in1 = 23
+    in2 = 24
+    en_a = 25
     # Left Motor
-    in3 = 23
-    in4 = 24
-    en_b = 13
+    in3 = 27
+    in4 = 22
+    en_b = 17
 
     GPIO.setmode(GPIO.BCM)
     GPIO.setup(in1,GPIO.OUT)
