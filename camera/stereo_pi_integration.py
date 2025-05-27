@@ -18,7 +18,7 @@ import yaml
 import os
 import queue
 import threading
-from motorcontrol import motor_control_loop
+from control.motorcontrol import motor_control_loop
 
 # Set this variable to True to show GUI, False to run headless
 show_gui = False

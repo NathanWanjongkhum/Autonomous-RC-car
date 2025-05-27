@@ -1,6 +1,6 @@
 import threading
-import motorcontrol
-import dummy_stereo
+import control.motorcontrol as motorcontrol
+import camera.dummy_stereo as dummy_stereo
 
 def run_motorcontrol(stop_event):
     motorcontrol.main(stop_event=stop_event)
