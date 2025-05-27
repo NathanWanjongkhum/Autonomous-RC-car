@@ -171,7 +171,7 @@ def test_phase2() -> None:
 
     if integrated_controller:
         # Phase 2: Execution
-        # execute_phase2(sim, integrated_controller) # Commented out by user
+        execute_phase2(sim, integrated_controller)  # Commented out by user
         pass
     else:
         print("Phase 2 planning failed!")
@@ -232,7 +232,7 @@ def transition_to_phase2(
         goal_pose.x,
         goal_pose.y,
         goal_pose.theta,
-        timeout=10000.0,  # Allow more time for complex paths
+        timeout=2500.0,  # Allow more time for complex paths
     )
 
     # Test the calculate_goal_progress method

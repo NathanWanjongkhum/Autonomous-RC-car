@@ -5,7 +5,7 @@ wheelbase: 0.25
 primitive_duration: 0.4
 num_angle_discretizations: 64
 
-Path planning completed in 0.142s
-States explored: 156
-Found optimal path with 90 commands
-Simulated time: 36.000s
+Path planning completed in 0.230s
+States explored: 318
+Found optimal path with 87 commands
+Simulated time: 34.800s

@@ -88,8 +88,8 @@ class DiscreteLatticeMotionPlanner:
         reference_point: str = "rear",
         primitive_duration: float = 0.5,
         num_angle_discretizations: int = 256,  # Increased for smoother paths
-        heading_alignment_weight: float = 0.01,  # Heading alignment parameter
-        straightness_bonus: float = -0.3,  # Bonus for consecutive straight motions
+        heading_alignment_weight: float = 0.05,  # Heading alignment parameter
+        straightness_bonus: float = -0.2,  # Bonus for consecutive straight motions
         goal_alignment_threshold: float = 0.5,
     ):
         """
@@ -143,7 +143,7 @@ class DiscreteLatticeMotionPlanner:
         self.straightness_bonus = straightness_bonus
         # Minimum progress threshold
         self.min_progress_threshold = (
-            0.1  # Minimum progress to consider a primitive useful
+            0.0  # Minimum progress to consider a primitive useful
         )
         # Precomputed motion primitives
         self.motion_primitives = {}
@@ -339,11 +339,7 @@ class DiscreteLatticeMotionPlanner:
             )
 
             # If close enough, reconstruct command sequence and return
-            if (
-                dx <= self.goal_tolerance
-                and dy <= self.goal_tolerance
-                and dtheta <= self.goal_theta_tolerance
-            ):
+            if dx <= self.goal_tolerance and dy <= self.goal_tolerance:
                 print(f"GOAL REACHED! Nodes explored: {nodes_explored}")
                 self.nodes_explored = nodes_explored
                 self.command_sequence = self._reconstruct_path(current_node)
@@ -608,7 +604,7 @@ class DiscreteLatticeMotionPlanner:
         # Vehicle dimensions and safety margin (in meters)
         vehicle_length = 0.3
         vehicle_width = 0.15
-        safety_margin = 0.1
+        safety_margin = 0.5
         total_margin = safety_margin + max(vehicle_length, vehicle_width) / 2
 
         # Sample points along trajectory more densely
@@ -641,8 +637,8 @@ class DiscreteLatticeMotionPlanner:
             margin_cells = int(total_margin / self.grid.resolution)
 
             # Check a rectangular region around the point
-            check_x = int(grid_x)
-            check_y = int(grid_y)
+            check_x = int(grid_x) + 5
+            check_y = int(grid_y) + 5
 
             if (
                 check_x < 0
