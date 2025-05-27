@@ -131,7 +131,7 @@ def test_phase2() -> None:
     # print("=== PHASE 2: RACING LINE OPTIMIZATION ===")
     grid_width = 20
     grid_height = 20
-    grid, start_pose, goal_pose = generate_grid(grid_width, grid_height, "corridor")
+    grid, start_pose, goal_pose = generate_grid(grid_width, grid_height, "empty")
 
     car = AckermannSteeringCar(x=0.5, y=0.5, theta=0.0)
 
@@ -169,14 +169,12 @@ def transition_to_phase2(
     # Step 2: Define start and goal for Phase 2
     # In a real competition, this might be the same start/finish line
     if start_pose is None:
-        start_pose = Pose(
-            x=simulation.car.x, y=simulation.car.y, theta=simulation.car.theta
-        )
+        start_pose = start_pose
 
     # For demonstration, let's set a goal position
     # In practice, this might be the finish line or a lap completion point
     if goal_pose is None:
-        goal_pose = Pose(x=4.5, y=4.5, theta=0.0)  # Adjust based on your track
+        goal_pose = goal_pose
 
     print(f"Planning from {start_pose} to {goal_pose}")
     fig, ax = plt.subplots(1, 1, figsize=(12, 10))
@@ -192,6 +190,9 @@ def transition_to_phase2(
         num_angle_discretizations=32,  # Higher resolution for smoother paths
     )
 
+    # Set the minimum progress threshold
+    lattice_planner.min_progress_threshold = 0.01
+
     # Step 4: Plan the optimal trajectory
     print("Planning optimal trajectory...")
     command_sequence = lattice_planner.plan_discrete_path(
@@ -201,8 +202,13 @@ def transition_to_phase2(
         goal_pose.x,
         goal_pose.y,
         goal_pose.theta,
-        timeout=60.0,  # Allow more time for complex paths
+        timeout=10000.0,  # Allow more time for complex paths
     )
+
+    # Test the calculate_goal_progress method
+    primitive = lattice_planner.motion_primitives[0][SteeringCommand.NEUTRAL]
+    progress = lattice_planner.calculate_goal_progress(primitive)
+    print(f"Goal progress for neutral primitive: {progress}")
 
     if not command_sequence:
         print("ERROR: Could not find path for Phase 2!")
