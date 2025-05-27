@@ -885,7 +885,7 @@ class DiscreteLatticeMotionPlanner:
         # Draw occupancy grid
         if hasattr(self.grid, "binary_grid"):
             ax.imshow(
-                self.grid.binary_grid.T,
+                self.grid.binary_grid,
                 origin="lower",
                 extent=[0, self.grid.width, 0, self.grid.height],
                 cmap="gray_r",
