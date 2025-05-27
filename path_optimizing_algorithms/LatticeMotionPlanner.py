@@ -847,8 +847,7 @@ class DiscreteLatticeMotionPlanner:
                 label="Goal Area",
             )
 
-            if hasattr(self, "goal_pose"):
-                ax.add_patch(circle)
+            ax.add_patch(circle)
 
             # Add end marker at the actual final position
             ax.plot(
@@ -861,25 +860,6 @@ class DiscreteLatticeMotionPlanner:
         else:
             if hasattr(self, "goal_pose"):
                 plt.add_patch(circle)
-
-        # Draw occupancy grid
-        if hasattr(self.grid, "binary_grid"):
-            if ax is not None:
-                ax.imshow(
-                    self.grid.binary_grid.T,
-                    origin="lower",
-                    extent=[0, self.grid.width, 0, self.grid.height],
-                    cmap="gray_r",
-                    alpha=0.3,
-                )
-            else:
-                plt.imshow(
-                    self.grid.binary_grid.T,
-                    origin="lower",
-                    extent=[0, self.grid.width, 0, self.grid.height],
-                    cmap="gray_r",
-                    alpha=0.3,
-                )
 
         if ax is not None:
             ax.set_xlabel("X (m)")
@@ -895,7 +875,6 @@ class DiscreteLatticeMotionPlanner:
             plt.legend()
             plt.grid(True)
             plt.axis("equal")
-            # plt.show() # Remove plt.show()
 
     def visualize_explored_states(self, ax):
         """Visualize the states explored by the planner."""

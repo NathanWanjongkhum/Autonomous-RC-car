@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import math
 import time
 from Phase2Controller import Phase2Controller
 from Simulation import Simulation
@@ -61,6 +62,32 @@ def generate_grid(
             for x in range(1, adjusted_width - 1):
                 for y in range(corridor_start_y, corridor_end_y + 1):
                     grid.binary_grid[x, y] = 0  # Clear inner area
+        case "aligned corridor":
+            # Vertical wall
+            for x in list(range(adjusted_width // 4 - 1, adjusted_width // 4 + 1)):
+                for y in list(range(adjusted_height - 1)):
+                    grid.binary_grid[x, y] = True
+
+            # Gap in the middle of the wall
+            for x in list(range(adjusted_width // 4 - 1, adjusted_width // 4 + 1)):
+                for y in list(
+                    range(
+                        math.floor(adjusted_height / 4), math.floor(adjusted_height / 2)
+                    )
+                ):
+                    grid.binary_grid[x, y] = False
+
+            # Vertical wall
+            for x in list(range(adjusted_width // 2 - 1, adjusted_width // 2 + 1)):
+                for y in list(range(adjusted_height - 1)):
+                    grid.binary_grid[x, y] = True
+
+            # Gap in the middle of the wall
+            for x in list(range(adjusted_width // 2 - 1, adjusted_width // 2 + 1)):
+                for y in list(
+                    range(math.floor(3 * adjusted_height / 4), adjusted_height - 1)
+                ):
+                    grid.binary_grid[x, y] = False
         case "obstacles":
             # Outer walls
             for i in range(adjusted_width):
@@ -108,13 +135,13 @@ def generate_grid(
     # Position start and goal to allow path planning around obstacles
     start_x = width * 0.1
     start_y = height * 0.1  # Further from center to avoid middle obstacle
-    goal_x = width * 0.5  # Further from center on opposite side
-    goal_y = height * 0.91  # Further from center on opposite side
+    goal_x = width * 0.9  # Further from center on opposite side
+    goal_y = height * 0.9  # Further from center on opposite side
 
     return (
         grid,
         Pose(start_x, start_y, np.pi / 6),
-        Pose(goal_x, goal_y, -np.pi / 6),
+        Pose(goal_x, goal_y, np.pi / 6),
     )
 
 
@@ -129,22 +156,24 @@ def test_phase2() -> None:
     # Initialize the occupancy grid
     print("=== TESTING PHASE 2 ===")
     # print("=== PHASE 2: RACING LINE OPTIMIZATION ===")
-    grid_width = 20
-    grid_height = 20
-    grid, start_pose, goal_pose = generate_grid(grid_width, grid_height, "empty")
+    grid_width = 5
+    grid_height = 5
+    grid, start_pose, goal_pose = generate_grid(
+        grid_width, grid_height, "aligned corridor"
+    )
 
     car = AckermannSteeringCar(x=0.5, y=0.5, theta=0.0)
 
-    sim = Simulation(car=car, grid=grid)
+    sim = Simulation(car=car, grid=grid, start_pose=start_pose, goal_pose=goal_pose)
 
     # Intermediate Phase: Planning
     integrated_controller = transition_to_phase2(sim, start_pose, goal_pose)
 
-    # if integrated_controller:
-    #     # Phase 2: Execution
-    #     execute_phase2(sim, integrated_controller)
-    # else:
-    #     print("Phase 2 planning failed!")
+    if integrated_controller:
+        # Phase 2: Execution
+        execute_phase2(sim, integrated_controller)
+    else:
+        print("Phase 2 planning failed!")
 
 
 def transition_to_phase2(
@@ -164,7 +193,7 @@ def transition_to_phase2(
 
     # Step 1: Process the occupancy grid from exploration
     print("Processing occupancy grid...")
-    simulation.grid.process_map()  # Clean up noise from exploration
+    # simulation.grid.process_map()  # Clean up noise from exploration
 
     # Step 2: Define start and goal for Phase 2
     # In a real competition, this might be the same start/finish line
@@ -301,9 +330,9 @@ def transition_to_phase2(
     integrated_controller = Phase2Controller(
         lattice_planner=lattice_planner,
         pure_pursuit=pure_pursuit,
-        max_path_deviation=0.25,  # Tighter tolerance for racing
-        replan_interval=1.5,  # Faster replanning
-        emergency_deviation=0.6,  # Emergency threshold
+        max_path_deviation=0.8,  # Tighter tolerance for racing
+        replan_interval=2.0,  # Faster replanning
+        emergency_deviation=1.0,  # Emergency threshold
     )
 
     # Step 7: Set the planned trajectory
@@ -333,7 +362,7 @@ def execute_phase2(simulation, integrated_controller):
         simulation.initialize_visualization()
 
     dt = 0.05  # Faster control loop for Phase 2
-    max_steps = 2000
+    max_steps = 5000
     step = 0
 
     while step < max_steps:
@@ -344,6 +373,9 @@ def execute_phase2(simulation, integrated_controller):
         steering_angle, linear_velocity = integrated_controller.compute_steering(
             current_pose, current_time, dt
         )
+
+        if steering_angle == 0.0 and linear_velocity == 0.0:
+            break  # Stop if no valid control command is returned
 
         # Apply control commands
         simulation.car.set_control_inputs(linear_velocity, steering_angle)
@@ -360,11 +392,6 @@ def execute_phase2(simulation, integrated_controller):
                 f"Deviation={metrics.get('mean_deviation', 0):.3f}m, "
                 f"Progress={metrics.get('primitive_progress', 0)*100:.1f}%"
             )
-
-        # Check completion conditions
-        if metrics.get("primitive_progress", 0) >= 0.95:
-            print("Phase 2 execution completed!")
-            break
 
         # Emergency stop check
         if metrics.get("max_deviation", 0) > integrated_controller.emergency_deviation:

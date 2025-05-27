@@ -194,9 +194,9 @@ class Phase2Controller:
 
         elif self.state.mode == ControlMode.REPLANNING:
             return self._execute_replanning(current_pose, current_time, dt)
-
         else:
             # Emergency stop
+            print("Emergency stop triggered!")
             return 0.0, 0.0
 
     def _calculate_path_deviation(self, x: float, y: float) -> float:
@@ -272,6 +272,7 @@ class Phase2Controller:
 
         if current_primitive is None:
             # Reached end of command sequence
+            print("Reached end of command sequence!")
             return 0.0, 0.0
 
         # Execute the discrete command with some pure pursuit smoothing

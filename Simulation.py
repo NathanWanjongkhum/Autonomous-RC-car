@@ -15,7 +15,7 @@ class Simulation:
     handles visualization and sensor simulation.
     """
 
-    def __init__(self, car=None, grid=None, width=10.0, height=10.0, resolution=0.05):
+    def __init__(self, car, grid, start_pose, goal_pose):
         """
         Initialize the simulation
 
@@ -25,17 +25,11 @@ class Simulation:
         width, height: Size of the environment in meters (used if grid is None)
         resolution: Grid resolution in meters (used if grid is None)
         """
-        # Create or use the provided occupancy grid
-        if grid is None:
-            self.grid = OccupancyGrid(width, height, resolution)
-        else:
-            self.grid = grid
+        self.grid = grid
+        self.car = car
 
-        # Create or use the provided car
-        if car is None:
-            self.car = AckermannSteeringCar(x=2.0, y=2.0, theta=0.0)
-        else:
-            self.car = car
+        self.start_pose = start_pose
+        self.goal_pose = goal_pose
 
         # Simulation parameters
         self.dt = 0.1  # Time step in seconds
@@ -347,21 +341,6 @@ class Simulation:
         wheel_length = self.car.wheel_radius * 2
         wheel_width = wheel_length / 2
 
-        for x, y in rear_wheel_positions:
-            wheel_patch = patches.Rectangle(
-                (
-                    x - self.car.wheel_width / 2,
-                    y - self.car.wheel_width / 2,
-                ),  # xy position
-                self.car.wheel_radius * 2,  # width
-                self.car.wheel_width,  # height
-                angle=np.degrees(self.car.theta),  # angle in degrees
-                color="black",
-                fill=True,
-            )
-            self.ax.add_patch(wheel_patch)
-            self.wheel_patches.append(wheel_patch)
-
         # Create occupancy grid visualization
         grid_img = np.zeros((self.grid.grid_height, self.grid.grid_width, 4))
         grid_img[self.grid.binary_grid, 3] = 1.0  # Set alpha for occupied cells
@@ -375,7 +354,9 @@ class Simulation:
         )
 
         # Plot initial position
-        self.ax.plot(self.car.x, self.car.y, "go", markersize=8)
+        self.ax.plot(self.start_pose.x, self.start_pose.y, "go", markersize=8)
+        # Plot last position
+        self.ax.plot(self.goal_pose.x, self.goal_pose.y, "ro", markersize=8)
 
         return self.fig, self.ax
 
@@ -400,26 +381,6 @@ class Simulation:
         steering_coords = self.car.visualize_steering()
         for i, (x1, y1, x2, y2) in enumerate(steering_coords):
             self.steering_lines[i].set_data([x1, x2], [y1, y2])
-
-        # Re-create front wheel patches with updated positions and angles
-        for x1, y1, x2, y2 in steering_coords:
-            # Calculate wheel angle
-            wheel_angle = np.arctan2(y2 - y1, x2 - x1)
-
-            # Create wheel patch
-            wheel_length = self.car.wheel_radius * 2
-            wheel_width = wheel_length / 2
-
-            wheel_patch = patches.Rectangle(
-                (x1 - wheel_width / 2, y1 - wheel_width / 2),
-                wheel_length,
-                wheel_width,
-                angle=np.degrees(wheel_angle),
-                color="black",
-                fill=True,
-            )
-            self.ax.add_patch(wheel_patch)
-            self.wheel_patches.append(wheel_patch)
 
         # Update rear wheel positions and patches
         cos_theta = np.cos(self.car.theta)
@@ -513,15 +474,12 @@ class Simulation:
         print(f"Running simulation for {num_steps} steps...")
         # Run simulation loop
         for step in range(num_steps):
-            print(f"Step {step}")
             if mode == "exploration":
                 velocity, steering_angle = self.phase1_exploration()
-                print(
-                    f"  Velocity: {velocity:.2f}, Steering: {np.degrees(steering_angle):.2f}°"
-                )
 
             # Update visualization every few steps or at pause intervals
             if step % 5 == 0 or (pause_interval and step % pause_interval == 0):
+                print(f"Step {step}")
                 self.update_visualization()
 
                 # If we have a pause interval and we're at a pause step, wait for user input

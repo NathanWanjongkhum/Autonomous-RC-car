@@ -22,7 +22,7 @@ class ConstantPurePursuitController:
     def __init__(
         self,
         angular_velocity: float = 0.5,
-        base_lookahead: float = 0.5,
+        base_lookahead: float = 0.8,
         reference_point: str = "rear",
         min_actuation_interval: float = 0.3,
         time_constant: float = 0.2,
@@ -32,8 +32,8 @@ class ConstantPurePursuitController:
         max_integral_degrees: float = 10.0,  # Maximum integral correction in degrees
         feedforward_lookahead_points: int = 3,  # How many points to look ahead
         feedforward_lookahead_time: float = 0.5,  # Alternative: time-based lookahead
-        hysteresis_threshold: float = 8.0,
-        dead_zone_threshold: float = 0.2,
+        hysteresis_threshold: float = 4.0,
+        dead_zone_threshold: float = 0.1,
     ) -> None:
         # Controller parameters
         self.angular_velocity: float = angular_velocity
