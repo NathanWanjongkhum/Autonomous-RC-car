@@ -1,7 +1,7 @@
 import RPi.GPIO as GPIO
 from time import sleep
 
-def main(stop_event=None):
+def motor_control_loop(command_queue, stop_event):
     GPIO.setwarnings(False)
 
     # Right Motor
@@ -33,44 +33,46 @@ def main(stop_event=None):
     GPIO.output(in3,GPIO.LOW)
 
     try:
-        while True:
-            if stop_event and stop_event.is_set():
-                break
-            user_input = input()
-            if user_input == 'w':
+        while not stop_event.is_set():
+            try:
+                command = command_queue.get(timeout=0.1)
+            except Exception:
+                continue
+            if command == 'w':
                 GPIO.output(in1,GPIO.HIGH)
                 GPIO.output(in2,GPIO.LOW)
                 print("Forward")
-            elif user_input == 's':
+            elif command == 's':
                 GPIO.output(in1,GPIO.LOW)
                 GPIO.output(in2,GPIO.HIGH)
                 print('Back')
-            elif user_input == 'd':
+            elif command == 'd':
                 GPIO.output(in4,GPIO.HIGH)
                 GPIO.output(in3,GPIO.LOW)
                 print('Right')
-            elif user_input == 'a':
+            elif command == 'a':
                 GPIO.output(in4,GPIO.LOW)
                 GPIO.output(in3,GPIO.HIGH)
                 print('Left')
-            elif user_input == 'stop':
+            elif command == 'stop':
                 GPIO.output(in1,GPIO.LOW)
                 GPIO.output(in2,GPIO.LOW)
                 GPIO.output(in4,GPIO.LOW)
                 GPIO.output(in3,GPIO.LOW)
                 print('Stop')
-            elif user_input == 'unturn':
+            elif command == 'unturn':
                 GPIO.output(in3,GPIO.LOW)
                 GPIO.output(in4,GPIO.LOW)
-            elif user_input == 'stopall':
-                if stop_event:
-                    stop_event.set()
+            elif command == 'stopall':
+                stop_event.set()
                 break
     except KeyboardInterrupt:
+        pass
+    finally:
         GPIO.cleanup()
         print("GPIO Clean up")
-    GPIO.cleanup()
+        pass
 
 if __name__ == '__main__':
-    main()
+    motor_control_loop()
 

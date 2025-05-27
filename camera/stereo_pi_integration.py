@@ -6,6 +6,7 @@ Unified stereo vision script for Pi Camera Module 2s, supporting:
 - Raw or calibrated (rectified) stereo
 - Normalized disparity/probability map output
 - Optional display
+- Occupancy grid export for pathfinding
 """
 
 from picamera2 import Picamera2
@@ -15,6 +16,9 @@ import time
 import argparse
 import yaml
 import os
+import queue
+import threading
+from control.motorcontrol import motor_control_loop
 
 # Set this variable to True to show GUI, False to run headless
 show_gui = False
@@ -99,6 +103,36 @@ class StereoPiVision:
         self.picam_left.stop()
         self.picam_right.stop()
 
+def get_occupancy_grid_from_stereo(width=20, height=20, threshold=0.5, calib_file=None):
+    """
+    Capture a stereo probability map and convert it to a binary occupancy grid.
+    Returns a numpy array of shape (height, width) with 1=obstacle, 0=free.
+    """
+    sv = StereoPiVision(width=width, height=height, fps=2, calib_file=calib_file)
+    prob = sv.grab_disparity(normalize=True)
+    sv.stop()
+    # Resize/crop to match grid size if needed
+    prob_resized = cv2.resize(prob, (width, height), interpolation=cv2.INTER_LINEAR)
+    occ_grid = (prob_resized > threshold).astype(np.uint8)
+    return occ_grid
+
+def stereo_decision_loop(command_queue, stop_event=None):
+    sv = StereoPiVision(width=320, height=240, fps=5)
+    try:
+        while not (stop_event and stop_event.is_set()):
+            prob = sv.grab_disparity(normalize=True)
+            # Example: If obstacle detected in center, stop; else, go forward
+            center = prob[prob.shape[0]//2, prob.shape[1]//2]
+            if center > 0.5:
+                command_queue.put('stop')
+                print("Obstacle detected: stop")
+            else:
+                command_queue.put('w')
+                print("Path clear: forward")
+            time.sleep(0.2)
+    finally:
+        sv.stop()
+
 def main():
     global show_gui
     parser = argparse.ArgumentParser(description="Pi Camera Stereo Vision Integration")
@@ -109,6 +143,10 @@ def main():
     parser.add_argument("--disp-show", action="store_true", help="Display disparity/probability map")
     parser.add_argument("--headless", action="store_true", help="Run without GUI windows")
     parser.add_argument("--out", help="Save .npy output (optional)")
+    parser.add_argument("--occ-grid", action="store_true", help="Output occupancy grid instead of probability map")
+    parser.add_argument("--grid-width", type=int, default=20, help="Occupancy grid width")
+    parser.add_argument("--grid-height", type=int, default=20, help="Occupancy grid height")
+    parser.add_argument("--threshold", type=float, default=0.5, help="Occupancy threshold")
     args = parser.parse_args()
 
     # Override show_gui based on command-line arguments
@@ -116,6 +154,21 @@ def main():
         show_gui = False
     elif args.disp_show:
         show_gui = True
+
+    if args.occ_grid:
+        occ_grid = get_occupancy_grid_from_stereo(
+            grid_width=args.grid_width,
+            grid_height=args.grid_height,
+            threshold=args.threshold,
+            calib_file=args.calib
+        )
+        print("Occupancy grid shape:", occ_grid.shape)
+        print(occ_grid)
+        if args.out:
+            os.makedirs(os.path.dirname(args.out), exist_ok=True)
+            np.save(args.out, occ_grid)
+            print(f"Saved occupancy grid → {args.out}")
+        return
 
     sv = StereoPiVision(
         width=args.width,
