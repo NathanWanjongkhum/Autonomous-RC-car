@@ -140,11 +140,11 @@ def test_phase2() -> None:
     # Intermediate Phase: Planning
     integrated_controller = transition_to_phase2(sim)
 
-    # if integrated_controller:
-    #     # Phase 2: Execution
-    #     execute_phase2(sim, integrated_controller)
-    # else:
-    #     print("Phase 2 planning failed!")
+    if integrated_controller:
+        # Phase 2: Execution
+        execute_phase2(sim, integrated_controller)
+    else:
+        print("Phase 2 planning failed!")
 
 
 def transition_to_phase2(simulation):
