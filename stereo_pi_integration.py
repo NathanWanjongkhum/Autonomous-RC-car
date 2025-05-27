@@ -16,6 +16,9 @@ import argparse
 import yaml
 import os
 
+# Set this variable to True to show GUI, False to run headless
+show_gui = False
+
 class StereoPiVision:
     def __init__(self, width=320, height=240, fps=5, calib_file=None, num_disparities=64, block_size=15):
         self.width = width
@@ -97,14 +100,22 @@ class StereoPiVision:
         self.picam_right.stop()
 
 def main():
+    global show_gui
     parser = argparse.ArgumentParser(description="Pi Camera Stereo Vision Integration")
     parser.add_argument("--calib", help="stereo_calib.yaml (optional)")
     parser.add_argument("--width", type=int, default=320)
     parser.add_argument("--height", type=int, default=240)
     parser.add_argument("--fps", type=float, default=5.0)
     parser.add_argument("--disp-show", action="store_true", help="Display disparity/probability map")
+    parser.add_argument("--headless", action="store_true", help="Run without GUI windows")
     parser.add_argument("--out", help="Save .npy output (optional)")
     args = parser.parse_args()
+
+    # Override show_gui based on command-line arguments
+    if args.headless:
+        show_gui = False
+    elif args.disp_show:
+        show_gui = True
 
     sv = StereoPiVision(
         width=args.width,
@@ -120,16 +131,19 @@ def main():
                 os.makedirs(os.path.dirname(args.out), exist_ok=True)
                 np.save(args.out, prob)
                 print(f"Saved probability map → {args.out}")
-            if args.disp_show:
+            if show_gui:
                 cv2.imshow("probability map", prob)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
             else:
-                print(prob)
-                break
+                print("Probability map shape:", prob.shape)
+                # Optionally print summary stats instead of the whole array
+                print("min:", np.min(prob), "max:", np.max(prob), "mean:", np.mean(prob))
+                time.sleep(0.5)
     finally:
         sv.stop()
-        cv2.destroyAllWindows()
+        if show_gui:
+            cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()
