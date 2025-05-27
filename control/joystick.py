@@ -41,19 +41,28 @@ def start_autonomous():
 
 def stop_all():
     global stdin, autonomous_proc
-    if stdin and not stdin.closed:
-        stdin.write('stopall\n')
-        stdin.flush()
-        stdin.close()
-        stdin = None
-    if autonomous_proc:
-        autonomous_proc.channel.close()
-        autonomous_proc = None
+    try:
+        if stdin and not stdin.closed:
+            stdin.write('stopall\n')
+            stdin.flush()
+            stdin.close()
+            stdin = None
+    except Exception as e:
+        print(f"[DEBUG] Error stopping manual: {e}")
+    try:
+        if autonomous_proc:
+            autonomous_proc.channel.close()
+            autonomous_proc = None
+    except Exception as e:
+        print(f"[DEBUG] Error stopping autonomous: {e}")
 
 def send_command(cmd):
     if mode == 'manual' and stdin and not stdin.closed:
-        stdin.write(cmd + '\n')
-        stdin.flush()
+        try:
+            stdin.write(cmd + '\n')
+            stdin.flush()
+        except Exception as e:
+            print(f"[DEBUG] Could not send command '{cmd}': {e}")
 
 # Pygame setup
 pygame.init()
@@ -100,6 +109,11 @@ def draw_menu():
     for i, line in enumerate(menu_lines):
         text = font.render(line, True, (255, 255, 255))
         screen.blit(text, (10, 10 + i * 30))
+    # Draw mode indicator
+    color = (0, 200, 0) if mode == 'autonomous' else (0, 120, 255)
+    pygame.draw.circle(screen, color, (370, 50), 15)
+    mode_text = font.render(mode.upper(), True, color)
+    screen.blit(mode_text, (320, 70))
     # Draw buttons
     for btn in BUTTONS:
         pygame.draw.rect(screen, (70, 70, 70), btn["rect"])
