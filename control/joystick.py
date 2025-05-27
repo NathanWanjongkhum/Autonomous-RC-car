@@ -30,31 +30,41 @@ def start_manual():
 
 def start_autonomous():
     global stdin, autonomous_proc, mode
+    # Try to stop manual mode if running
     if stdin and not stdin.closed:
-        stdin.write('stopall\n')
-        stdin.flush()
-        stdin.close()
-        stdin = None
-    autonomous_proc = ssh.exec_command(AUTONOMOUS_CMD, get_pty=True)[0]
-    mode = 'autonomous'
-    print("Switched to AUTONOMOUS mode.")
-
-def stop_all():
-    global stdin, autonomous_proc
-    try:
-        if stdin and not stdin.closed:
+        try:
             stdin.write('stopall\n')
             stdin.flush()
             stdin.close()
-            stdin = None
-    except Exception as e:
-        print(f"[DEBUG] Error stopping manual: {e}")
+        except Exception as e:
+            print(f"[DEBUG] Error stopping manual in start_autonomous: {e}")
+        stdin = None
+    # Start autonomous process
     try:
-        if autonomous_proc:
-            autonomous_proc.channel.close()
-            autonomous_proc = None
+        autonomous_proc = ssh.exec_command(AUTONOMOUS_CMD, get_pty=True)[0]
+        mode = 'autonomous'
+        print("Switched to AUTONOMOUS mode.")
     except Exception as e:
-        print(f"[DEBUG] Error stopping autonomous: {e}")
+        print(f"[DEBUG] Error starting autonomous: {e}")
+
+def stop_all():
+    global stdin, autonomous_proc
+    # Stop manual mode if running
+    if stdin and not stdin.closed:
+        try:
+            stdin.write('stopall\n')
+            stdin.flush()
+            stdin.close()
+        except Exception as e:
+            print(f"[DEBUG] Error stopping manual in stop_all: {e}")
+        stdin = None
+    # Stop autonomous mode if running
+    if autonomous_proc:
+        try:
+            autonomous_proc.channel.close()
+        except Exception as e:
+            print(f"[DEBUG] Error stopping autonomous in stop_all: {e}")
+        autonomous_proc = None
 
 def send_command(cmd):
     if mode == 'manual' and stdin and not stdin.closed:
@@ -63,6 +73,8 @@ def send_command(cmd):
             stdin.flush()
         except Exception as e:
             print(f"[DEBUG] Could not send command '{cmd}': {e}")
+    else:
+        print(f"[DEBUG] Skipped sending '{cmd}': stdin is None or closed")
 
 # Pygame setup
 pygame.init()
