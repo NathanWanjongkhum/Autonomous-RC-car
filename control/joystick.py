@@ -30,30 +30,51 @@ def start_manual():
 
 def start_autonomous():
     global stdin, autonomous_proc, mode
+    # Try to stop manual mode if running
     if stdin and not stdin.closed:
-        stdin.write('stopall\n')
-        stdin.flush()
-        stdin.close()
+        try:
+            stdin.write('stopall\n')
+            stdin.flush()
+            stdin.close()
+        except Exception as e:
+            print(f"[DEBUG] Error stopping manual in start_autonomous: {e}")
         stdin = None
-    autonomous_proc = ssh.exec_command(AUTONOMOUS_CMD, get_pty=True)[0]
-    mode = 'autonomous'
-    print("Switched to AUTONOMOUS mode.")
+    # Start autonomous process
+    try:
+        autonomous_proc = ssh.exec_command(AUTONOMOUS_CMD, get_pty=True)[0]
+        mode = 'autonomous'
+        print("Switched to AUTONOMOUS mode.")
+    except Exception as e:
+        print(f"[DEBUG] Error starting autonomous: {e}")
 
 def stop_all():
     global stdin, autonomous_proc
+    # Stop manual mode if running
     if stdin and not stdin.closed:
-        stdin.write('stopall\n')
-        stdin.flush()
-        stdin.close()
+        try:
+            stdin.write('stopall\n')
+            stdin.flush()
+            stdin.close()
+        except Exception as e:
+            print(f"[DEBUG] Error stopping manual in stop_all: {e}")
         stdin = None
+    # Stop autonomous mode if running
     if autonomous_proc:
-        autonomous_proc.channel.close()
+        try:
+            autonomous_proc.channel.close()
+        except Exception as e:
+            print(f"[DEBUG] Error stopping autonomous in stop_all: {e}")
         autonomous_proc = None
 
 def send_command(cmd):
     if mode == 'manual' and stdin and not stdin.closed:
-        stdin.write(cmd + '\n')
-        stdin.flush()
+        try:
+            stdin.write(cmd + '\n')
+            stdin.flush()
+        except Exception as e:
+            print(f"[DEBUG] Could not send command '{cmd}': {e}")
+    else:
+        print(f"[DEBUG] Skipped sending '{cmd}': stdin is None or closed")
 
 # Pygame setup
 pygame.init()
@@ -100,6 +121,11 @@ def draw_menu():
     for i, line in enumerate(menu_lines):
         text = font.render(line, True, (255, 255, 255))
         screen.blit(text, (10, 10 + i * 30))
+    # Draw mode indicator
+    color = (0, 200, 0) if mode == 'autonomous' else (0, 120, 255)
+    pygame.draw.circle(screen, color, (370, 50), 15)
+    mode_text = font.render(mode.upper(), True, color)
+    screen.blit(mode_text, (320, 70))
     # Draw buttons
     for btn in BUTTONS:
         pygame.draw.rect(screen, (70, 70, 70), btn["rect"])
