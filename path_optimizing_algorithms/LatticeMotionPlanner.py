@@ -141,6 +141,10 @@ class DiscreteLatticeMotionPlanner:
         self.heading_alignment_weight = heading_alignment_weight
         # Straightness bonus parameters
         self.straightness_bonus = straightness_bonus
+        # Minimum progress threshold
+        self.min_progress_threshold = (
+            0.1  # Minimum progress to consider a primitive useful
+        )
         # Precomputed motion primitives
         self.motion_primitives = {}
         self._generate_motion_primitives()
@@ -148,6 +152,27 @@ class DiscreteLatticeMotionPlanner:
         self.explored_states: List[ContinuousState] = (
             []
         )  # To store states visited during search
+
+    def calculate_goal_progress(self, primitive: DiscreteMotionPrimitive) -> float:
+        """
+        Calculate the progress made by a motion primitive towards the goal.
+        """
+        # Calculate the distance to the goal after applying the primitive
+        next_x, next_y, next_theta = apply_motion_primitive(
+            (0.0, 0.0, 0.0), primitive.end_displacement
+        )
+        distance_to_goal = np.sqrt(
+            (self.goal_x - next_x) ** 2 + (self.goal_y - next_y) ** 2
+        )
+
+        # Calculate the angle to the goal after applying the primitive
+        goal_direction = self.calculate_goal_direction(next_x, next_y)
+        heading_error = abs(self._angular_difference(next_theta, goal_direction))
+
+        # Combine the distance and angle to calculate the progress
+        progress = 1.0 / (distance_to_goal + 0.1 * heading_error)
+
+        return progress
 
     def _generate_motion_primitives(self):
         """
@@ -334,9 +359,24 @@ class DiscreteLatticeMotionPlanner:
 
             # Try each motion primitive
             current_angle_idx = current_node.discrete_pose[2]
+
+            # Calculate goal progress for each primitive
+            primitive_progress = {}
             for steering_cmd, primitive in self.motion_primitives[
                 current_angle_idx
             ].items():
+                primitive_progress[steering_cmd] = self.calculate_goal_progress(
+                    primitive
+                )
+
+            # Sort primitives by goal progress
+            sorted_primitives = sorted(
+                primitive_progress.items(), key=lambda item: item[1], reverse=True
+            )
+
+            for steering_cmd, progress in sorted_primitives:
+                primitive = self.motion_primitives[current_angle_idx][steering_cmd]
+
                 # Check if trajectory is collision-free
                 if not self._is_primitive_collision_free(
                     current_node.continuous_pose.x,
@@ -344,6 +384,10 @@ class DiscreteLatticeMotionPlanner:
                     current_node.continuous_pose.theta,
                     primitive,
                 ):
+                    continue
+
+                # Add early termination for obviously bad primitives
+                if progress < self.min_progress_threshold:
                     continue
 
                 # Calculate next state
@@ -439,7 +483,7 @@ class DiscreteLatticeMotionPlanner:
                     self.search_nodes[next_discrete_state] = next_node
                     heapq.heappush(open_set, (f_score, id(next_node), next_node))
 
-        print("No path found within timeout")
+        print("No path found before empty/timeout")
         return None
 
     def _reconstruct_path(self, goal_node: SearchNode) -> List[DiscreteMotionPrimitive]:
