@@ -81,16 +81,16 @@ class DiscreteLatticeMotionPlanner:
         self,
         occupancy_grid,
         angular_velocity: float = 0.5,
-        steering_angle_left: float = 35,
-        steering_angle_right: float = -35,
+        steering_angle_left: float = 15,
+        steering_angle_right: float = -15,
         wheelbase: float = 0.25,
         wheelradius: float = 1,
         reference_point: str = "rear",
         primitive_duration: float = 0.5,
-        num_angle_discretizations: int = 128,  # Increased for smoother paths
-        heading_alignment_weight: float = 0.05,  # Heading alignment parameter
+        num_angle_discretizations: int = 256,  # Increased for smoother paths
+        heading_alignment_weight: float = 0.01,  # Heading alignment parameter
         straightness_bonus: float = -0.3,  # Bonus for consecutive straight motions
-        goal_alignment_threshold: float = 0.3,
+        goal_alignment_threshold: float = 0.5,
     ):
         """
         Initialize the discrete motion planner
@@ -134,7 +134,7 @@ class DiscreteLatticeMotionPlanner:
         self.goal_theta_tolerance = self.num_angles  # angle indices - tighter tolerance
 
         self.helpful_turn_penalty: float = 0.25  # Penalty for turns toward goal
-        self.harmful_turn_penalty: float = 5.0  # Penalty for turns away from goal
+        self.harmful_turn_penalty: float = 7.0  # Penalty for turns away from goal
         self.goal_alignment_threshold = goal_alignment_threshold
 
         # Heading alignment parameters
@@ -227,7 +227,8 @@ class DiscreteLatticeMotionPlanner:
                 if steering_cmd == SteeringCommand.NEUTRAL:
                     cost = distance  # Prefer straight motion
                 else:
-                    cost = distance * 1.5  # Penalize turns slightly
+                    # Penalize turns based on angular change
+                    cost = distance * (1 + abs(end_displacement[2]))
 
                 # Calculate turn characteristics
                 angular_change = abs(
@@ -696,8 +697,8 @@ class DiscreteLatticeMotionPlanner:
             alignment_penalty = 0.0
 
         # Combined heuristic
-        euclidean = 0.6 * distance
-        manhattan = 0.4 * (abs(dx) + abs(dy))
+        euclidean = 0.8 * distance
+        manhattan = 0.2 * (abs(dx) + abs(dy))
 
         total_heuristic = euclidean + manhattan + alignment_penalty
 
@@ -972,12 +973,12 @@ def phase2_discrete_planning(
     planner = DiscreteLatticeMotionPlanner(
         occupancy_grid=occupancy_grid,
         angular_velocity=angular_velocity,
-        steering_angle_left=steering_angles,
-        steering_angle_right=-steering_angles,
+        steering_angle_left=25,
+        steering_angle_right=-25,
         wheelbase=wheelbase,
         primitive_duration=primitive_duration,
-        num_angle_discretizations=32,  # Increased angle discretization for smoother paths
-        straightness_bonus=-0.3,  # Add straightness bonus
+        num_angle_discretizations=64,  # Increased angle discretization for smoother paths
+        straightness_bonus=-0.5,  # Add straightness bonus
     )
 
     # Plan the command sequence

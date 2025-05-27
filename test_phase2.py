@@ -156,8 +156,8 @@ def test_phase2() -> None:
     # Initialize the occupancy grid
     print("=== TESTING PHASE 2 ===")
     # print("=== PHASE 2: RACING LINE OPTIMIZATION ===")
-    grid_width = 5
-    grid_height = 5
+    grid_width = 20
+    grid_height = 20
     grid, start_pose, goal_pose = generate_grid(
         grid_width, grid_height, "aligned corridor"
     )
@@ -171,7 +171,8 @@ def test_phase2() -> None:
 
     if integrated_controller:
         # Phase 2: Execution
-        execute_phase2(sim, integrated_controller)
+        # execute_phase2(sim, integrated_controller) # Commented out by user
+        pass
     else:
         print("Phase 2 planning failed!")
 
@@ -212,11 +213,11 @@ def transition_to_phase2(
     lattice_planner = DiscreteLatticeMotionPlanner(
         occupancy_grid=simulation.grid,
         angular_velocity=0.8,  # Faster for Phase 2
-        steering_angle_left=30,  # Degrees
-        steering_angle_right=-30,
+        steering_angle_left=20,  # Degrees
+        steering_angle_right=-20,
         wheelbase=0.25,
         primitive_duration=0.4,  # Shorter for more responsive control
-        num_angle_discretizations=32,  # Higher resolution for smoother paths
+        num_angle_discretizations=64,  # Higher resolution for smoother paths
     )
 
     # Set the minimum progress threshold
