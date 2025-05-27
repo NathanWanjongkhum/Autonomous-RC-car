@@ -494,7 +494,6 @@ class ConstantPurePursuitController:
         self.actual_angles.append(actual_steering_angle)
         self.steering_states_history.append(self.current_state)
 
-        print(actual_steering_angle, self.angular_velocity)
         return actual_steering_angle, self.angular_velocity
 
     def visualize_control(

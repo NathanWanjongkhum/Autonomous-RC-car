@@ -240,7 +240,7 @@ class OccupancyGrid:
         It's useful to run after mapping to get a cleaner map for path planning.
         """
         # Apply Gaussian filter to smooth the probability grid
-        smoothed_grid = gaussian_filter(self.grid, sigma=1.0)
+        smoothed_grid = gaussian_filter(self.grid, sigma=0.5)
 
         # Threshold to get binary grid
         self.binary_grid = smoothed_grid > self.occupancy_threshold

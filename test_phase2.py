@@ -129,8 +129,8 @@ def test_phase2() -> None:
     # Initialize the occupancy grid
     print("=== TESTING PHASE 2 ===")
     # print("=== PHASE 2: RACING LINE OPTIMIZATION ===")
-    grid_width = 5
-    grid_height = 5
+    grid_width = 20
+    grid_height = 20
     grid, start_pose, goal_pose = generate_grid(grid_width, grid_height, "corridor")
 
     car = AckermannSteeringCar(x=0.5, y=0.5, theta=0.0)
@@ -138,16 +138,18 @@ def test_phase2() -> None:
     sim = Simulation(car=car, grid=grid)
 
     # Intermediate Phase: Planning
-    integrated_controller = transition_to_phase2(sim)
+    integrated_controller = transition_to_phase2(sim, start_pose, goal_pose)
 
-    if integrated_controller:
-        # Phase 2: Execution
-        execute_phase2(sim, integrated_controller)
-    else:
-        print("Phase 2 planning failed!")
+    # if integrated_controller:
+    #     # Phase 2: Execution
+    #     execute_phase2(sim, integrated_controller)
+    # else:
+    #     print("Phase 2 planning failed!")
 
 
-def transition_to_phase2(simulation):
+def transition_to_phase2(
+    simulation, start_pose: Pose | None, goal_pose: Pose | None
+) -> Phase2Controller:
     """
     Transition from Phase 1 exploration to Phase 2 execution
 
@@ -166,13 +168,15 @@ def transition_to_phase2(simulation):
 
     # Step 2: Define start and goal for Phase 2
     # In a real competition, this might be the same start/finish line
-    start_pose = Pose(
-        x=simulation.car.x, y=simulation.car.y, theta=simulation.car.theta
-    )
+    if start_pose is None:
+        start_pose = Pose(
+            x=simulation.car.x, y=simulation.car.y, theta=simulation.car.theta
+        )
 
     # For demonstration, let's set a goal position
     # In practice, this might be the finish line or a lap completion point
-    goal_pose = Pose(x=4.5, y=4.5, theta=0.0)  # Adjust based on your track
+    if goal_pose is None:
+        goal_pose = Pose(x=4.5, y=4.5, theta=0.0)  # Adjust based on your track
 
     print(f"Planning from {start_pose} to {goal_pose}")
     fig, ax = plt.subplots(1, 1, figsize=(12, 10))

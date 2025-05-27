@@ -87,8 +87,8 @@ class DiscreteLatticeMotionPlanner:
         wheelradius: float = 1,
         reference_point: str = "rear",
         primitive_duration: float = 0.5,
-        num_angle_discretizations: int = 64,  # Increased for smoother paths
-        heading_alignment_weight: float = 0.3,  # Heading alignment parameter
+        num_angle_discretizations: int = 128,  # Increased for smoother paths
+        heading_alignment_weight: float = 0.05,  # Heading alignment parameter
         straightness_bonus: float = -0.3,  # Bonus for consecutive straight motions
         goal_alignment_threshold: float = 0.3,
     ):
@@ -133,8 +133,8 @@ class DiscreteLatticeMotionPlanner:
         self.goal_tolerance = 1  # grid cells - much tighter tolerance
         self.goal_theta_tolerance = self.num_angles  # angle indices - tighter tolerance
 
-        self.helpful_turn_penalty: float = 0.5  # Penalty for turns toward goal
-        self.harmful_turn_penalty: float = 10.0  # Penalty for turns away from goal
+        self.helpful_turn_penalty: float = 0.25  # Penalty for turns toward goal
+        self.harmful_turn_penalty: float = 5.0  # Penalty for turns away from goal
         self.goal_alignment_threshold = goal_alignment_threshold
 
         # Heading alignment parameters
@@ -563,7 +563,7 @@ class DiscreteLatticeMotionPlanner:
         # Vehicle dimensions and safety margin (in meters)
         vehicle_length = 0.3
         vehicle_width = 0.15
-        safety_margin = 0.2
+        safety_margin = 0.1
         total_margin = safety_margin + max(vehicle_length, vehicle_width) / 2
 
         # Sample points along trajectory more densely
