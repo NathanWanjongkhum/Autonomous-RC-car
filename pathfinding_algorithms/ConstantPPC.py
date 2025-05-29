@@ -403,9 +403,7 @@ class ConstantPurePursuitController:
         self.error_history.append(heading_error)
 
         # Pure Pursuit base steering calculation
-        lookahead_distance = np.sqrt(
-            (target_x - calc_x) ** 2 + (target_y - calc_y) ** 2
-        )
+        lookahead_distance = self.calculate_adaptive_lookahead(closest_idx)
 
         if lookahead_distance > 0.01:
             base_steering = np.arctan2(
