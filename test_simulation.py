@@ -86,7 +86,7 @@ def run_simulation(
 ) -> SimulationResults:
     # Create the car model
     car: AckermannSteeringCar = AckermannSteeringCar(
-        wheelbase=0.25, max_angular_velocity=0.5, max_steering_angle=np.radians(35)
+        wheel_base=0.25, max_angular_velocity=0.5, max_steering_angle=np.radians(35)
     )
 
     # Create the controller

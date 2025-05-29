@@ -52,7 +52,7 @@ class AckermannSteeringCar:
     def __init__(
         self,
         start_pose: ContinuousPose,
-        wheelbase: float = 0.25,
+        wheel_base: float = 0.25,
         wheel_radius: float = 0.05,
         wheel_width: float = 0.04,
         wheel_offset: float = 0.03,
@@ -65,14 +65,15 @@ class AckermannSteeringCar:
         # Physical parameters
         self.length: float = length  # Car length (meters)
         self.width: float = width  # Car width (meters)
-        self.wheelbase: float = (
-            wheelbase  # Distance between front and rear axles (meters)
+        self.wheel_base: float = (
+            wheel_base  # Distance between front and rear axles (meters)
         )
         self.wheel_radius: float = wheel_radius  # Wheel radius (meters)
         self.wheel_width: float = wheel_width  # Width of wheel (meters)
         self.wheel_offset: float = (
             wheel_offset  # How far wheels extend beyond the body (meters)
         )
+        self.reference_point = reference_point
         # Physical constraints
         self.max_steering_angle: float = (
             max_steering_angle  # Maximum steering angle (rad)
@@ -100,21 +101,14 @@ class AckermannSteeringCar:
         """
         # Calculate angular velocity from steering angle (bicycle model) θ̇ = v * tan(φ) / L
         if abs(self.v) > 1e-5:  # Only update angular velocity if car is moving
-            self.omega = self.v * np.tan(self.steering_angle) / self.wheelbase
+            self.omega = self.v * np.tan(self.steering_angle) / self.wheel_base
         else:
             self.omega = 0
 
         # Update state using Ackermann kinematics
         self.x += self.v * np.cos(self.theta) * dt
         self.y += self.v * np.sin(self.theta) * dt
-        self.theta = self.get_principal_value(self.theta + self.omega * dt)
-
-    @staticmethod
-    def get_principal_value(angle: float) -> float:
-        """
-        Normalize theta to [-π, π] to prevent growing continuously
-        """
-        return np.arctan2(np.sin(angle), np.cos(angle))
+        self.theta = get_principal_value(self.theta + self.omega * dt)
 
     def set_control_inputs(self, v: float, steering_angle: float):
         """
@@ -214,3 +208,10 @@ class AckermannSteeringCar:
             (left_wheel_x, left_wheel_y, left_wheel_end_x, left_wheel_end_y),
             (right_wheel_x, right_wheel_y, right_wheel_end_x, right_wheel_end_y),
         ]
+
+@staticmethod
+def get_principal_value(angle: float) -> float:
+    """
+    Normalize theta to [-π, π] to prevent growing continuously
+    """
+    return np.arctan2(np.sin(angle), np.cos(angle))

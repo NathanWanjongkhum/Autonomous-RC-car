@@ -159,13 +159,12 @@ def transition_to_phase2(
 
     # Step 3: Create and configure the lattice planner
     lattice_planner = DiscreteLatticeMotionPlanner(
-        occupancy_grid=simulation.grid,
+        car=simulation.car,
+        grid=simulation.grid,
         angular_velocity=0.8,  # Faster for Phase 2
-        steering_angle=20,  # Degrees
-        wheelbase=0.25,
-        primitive_duration=0.4,  # Shorter for more responsive control
-        num_angle_discretizations=64,  # Higher resolution for smoother paths
-        min_progress_threshold=0.01,
+        primitive_duration=0.1,  
+        num_angle_discretizations=64, 
+        min_progress_threshold=0.0,
     )
 
     # Step 4: Plan the optimal trajectory
@@ -230,7 +229,7 @@ def transition_to_phase2(
             "steering_angle_right": lattice_planner.steering_angles[
                 SteeringCommand.RIGHT
             ],
-            "wheelbase": lattice_planner.wheelbase,
+            "wheelbase": lattice_planner.wheel_base,
             "primitive_duration": lattice_planner.primitive_duration,
             "num_angle_discretizations": lattice_planner.num_angles,
         }
@@ -371,9 +370,7 @@ if __name__ == "__main__":
     # print("=== PHASE 2: RACING LINE OPTIMIZATION ===")
     grid_width = 20
     grid_height = 20
-    grid, start_pose, goal_pose = generate_grid(
-        grid_width, grid_height, "aligned corridor"
-    )
+    grid, start_pose, goal_pose = generate_grid(grid_width, grid_height, "aligned corridor")
 
     car = AckermannSteeringCar(start_pose, reference_point="rear")
 

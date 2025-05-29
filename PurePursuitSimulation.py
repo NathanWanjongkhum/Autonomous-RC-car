@@ -454,7 +454,7 @@ class PurePursuitSimulation:
             x=self.car.x,
             y=self.car.y,
             theta=self.car.theta,
-            wheelbase=self.car.wheelbase,
+            wheelbase=self.car.wheel_base,
             dt=self.config.dt,
         )
 

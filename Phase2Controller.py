@@ -286,7 +286,7 @@ class Phase2Controller:
             current_pose[0],
             current_pose[1],
             current_pose[2],
-            self.lattice_planner.wheelbase,
+            self.lattice_planner.wheel_base,
             dt,
         )
 
@@ -316,7 +316,7 @@ class Phase2Controller:
             current_pose[0],
             current_pose[1],
             current_pose[2],
-            self.lattice_planner.wheelbase,
+            self.lattice_planner.wheel_base,
             dt,
         )
 
@@ -333,7 +333,7 @@ class Phase2Controller:
             current_pose[0],
             current_pose[1],
             current_pose[2],
-            self.lattice_planner.wheelbase,
+            self.lattice_planner.wheel_base,
             dt,
         )
 

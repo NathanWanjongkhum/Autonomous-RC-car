@@ -7,7 +7,8 @@ import time
 from enum import Enum
 import matplotlib.pyplot as plt
 
-from robots.AckermannSteeringCar import ContinuousPose, DiscretePose
+from maps.OccupancyGrid import OccupancyGrid
+from robots.AckermannSteeringCar import AckermannSteeringCar, ContinuousPose, DiscretePose, get_principal_value
 
 
 class SteeringCommand(Enum):
@@ -53,7 +54,8 @@ class DiscreteLatticeMotionPlanner:
 
     def __init__(
         self,
-        occupancy_grid,
+        car: AckermannSteeringCar,
+        grid: OccupancyGrid,
         angular_velocity: float = 0.5,
         steering_angle: float = 15,
         wheelbase: float = 0.25,
@@ -66,28 +68,13 @@ class DiscreteLatticeMotionPlanner:
         goal_alignment_threshold: float = 0.5,
         min_progress_threshold: float = 0.0,
     ):
-        """
-        Initialize the discrete motion planner
-
-        Parameters:
-        occupancy_grid:
-        angular_velocity:
-        steering_angle_left/right:
-        wheelbase:
-        primitive_duration:
-        num_angle_discretizations:
-        heading_alignment_weight:
-        """
-        self.grid = occupancy_grid  # OccupancyGrid instance
-        self.angular_velocity = (
-            angular_velocity  # Fixed angular velocity when turning (rad/s)
-        )
-        self.wheelbase = wheelbase  # Distance between axles (m)
-        self.wheelradius = wheelradius
+        self.grid = grid  # OccupancyGrid instance
+        self.angular_velocity = angular_velocity  # Fixed angular velocity when turning (rad/s)
+        
+        self.wheel_base = wheelbase  # Distance between axles (m)
+        self.wheel_radius = wheelradius
         self.reference_point = reference_point
-        self.primitive_duration = (
-            primitive_duration  # Duration of each motion primitive (s)
-        )
+        self.primitive_duration = primitive_duration  # Duration of each motion primitive (s)
         self.num_angles = num_angle_discretizations  # Number of discrete heading angles
 
         # Fixed steering angles for left/right
@@ -101,13 +88,13 @@ class DiscreteLatticeMotionPlanner:
         # For fixed angular velocity: v = ω * R, where R = L/tan(φ)
 
         # Basic wheel speed to linear speed
-        self.linear_velocity = self.angular_velocity * self.wheelradius
+        self.linear_velocity = self.angular_velocity * self.wheel_radius
 
         # Resolution for discretization
-        self.resolution = occupancy_grid.resolution
+        self.resolution = grid.resolution
         self.angle_resolution = 2 * np.pi / num_angle_discretizations
 
-        # Goal tolerance - tightened for precise goal reaching
+        # Goal tolerance
         self.goal_tolerance = 1  # grid cells - much tighter tolerance
         self.goal_theta_tolerance = self.num_angles  # angle indices - tighter tolerance
 
@@ -135,14 +122,9 @@ class DiscreteLatticeMotionPlanner:
         Calculate the progress made by a motion primitive towards the goal.
         """
         # Calculate the distance to the goal after applying the primitive
-        next_x, next_y, next_theta = apply_motion_primitive(
-            (0.0, 0.0, 0.0), primitive.end_displacement
-        )
-        distance_to_goal = np.sqrt(
-            (self.goal_x - next_x) ** 2 + (self.goal_y - next_y) ** 2
-        )
+        next_x, next_y, next_theta = apply_motion_primitive((0.0, 0.0, 0.0), primitive.end_displacement)
+        distance_to_goal = np.sqrt((self.goal_x - next_x) ** 2 + (self.goal_y - next_y) ** 2)
 
-        # Calculate the angle to the goal after applying the primitive
         goal_direction = self.calculate_goal_direction(next_x, next_y)
         heading_error = abs(self._angular_difference(next_theta, goal_direction))
 
@@ -184,15 +166,13 @@ class DiscreteLatticeMotionPlanner:
                         omega = (
                             self.linear_velocity
                             * np.tan(steering_angle)
-                            / self.wheelbase
+                            / self.wheel_base
                         )
                     else:
                         omega = 0
 
-                    theta += omega * dt
-
                     # Normalize theta to prevent accumulation (same as car)
-                    theta = np.arctan2(np.sin(theta), np.cos(theta))
+                    theta = get_principal_value(theta + omega * dt)
 
                     trajectory.append((x, y, theta))
 
@@ -629,13 +609,8 @@ class DiscreteLatticeMotionPlanner:
         Calculate the shortest angular difference between two angles.
         Returns a value between -π and π.
         """
-        diff = angle2 - angle1
-        # Normalize to [-π, π]
-        while diff > np.pi:
-            diff -= 2 * np.pi
-        while diff < -np.pi:
-            diff += 2 * np.pi
-        return diff
+        return (angle2 - angle1) % (2 * np.pi)
+        
 
     def _heuristic(
         self, x: float, y: float, theta: float, goal_x: float, goal_y: float
@@ -891,7 +866,7 @@ def phase2_discrete_planning(
     """
     # Create the discrete planner
     planner = DiscreteLatticeMotionPlanner(
-        occupancy_grid=occupancy_grid,
+        grid=occupancy_grid,
         angular_velocity=angular_velocity,
         steering_angle_left=steering_angles,
         steering_angle_right=-steering_angles,
