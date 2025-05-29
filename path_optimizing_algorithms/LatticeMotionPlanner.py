@@ -96,23 +96,27 @@ class DiscreteLatticeMotionPlanner:
         Initialize the discrete motion planner
 
         Parameters:
-        occupancy_grid: OccupancyGrid instance
-        angular_velocity: Fixed angular velocity when turning (rad/s)
-        steering_angle_left/right: Fixed steering angles for left/right
-        wheelbase: Distance between axles (m)
-        primitive_duration: Duration of each motion primitive (s)
-        num_angle_discretizations: Number of discrete heading angles
-        heading_alignment_weight: Weight for heading alignment in heuristic
+        occupancy_grid:
+        angular_velocity:
+        steering_angle_left/right:
+        wheelbase:
+        primitive_duration:
+        num_angle_discretizations:
+        heading_alignment_weight:
         """
-        self.grid = occupancy_grid
-        self.angular_velocity = angular_velocity
-        self.wheelbase = wheelbase
+        self.grid = occupancy_grid  # OccupancyGrid instance
+        self.angular_velocity = (
+            angular_velocity  # Fixed angular velocity when turning (rad/s)
+        )
+        self.wheelbase = wheelbase  # Distance between axles (m)
         self.wheelradius = wheelradius
         self.reference_point = reference_point
-        self.primitive_duration = primitive_duration
-        self.num_angles = num_angle_discretizations
+        self.primitive_duration = (
+            primitive_duration  # Duration of each motion primitive (s)
+        )
+        self.num_angles = num_angle_discretizations  # Number of discrete heading angles
 
-        # Discrete steering angles
+        # Fixed steering angles for left/right
         self.steering_angles = {
             SteeringCommand.LEFT: np.radians(steering_angle_left),
             SteeringCommand.NEUTRAL: 0.0,
@@ -138,7 +142,9 @@ class DiscreteLatticeMotionPlanner:
         self.goal_alignment_threshold = goal_alignment_threshold
 
         # Heading alignment parameters
-        self.heading_alignment_weight = heading_alignment_weight
+        self.heading_alignment_weight = (
+            heading_alignment_weight  # Weight for heading alignment in heuristic
+        )
         # Straightness bonus parameters
         self.straightness_bonus = straightness_bonus
         # Minimum progress threshold
@@ -324,12 +330,6 @@ class DiscreteLatticeMotionPlanner:
             # Store explored state for visualization
             self.explored_states.append(current_node.continuous_pose)
 
-            # print(
-            #     f"Exploring node {nodes_explored}: discrete={current_node.discrete_pose}, "
-            #     f"exact=({current_node.continuous_pose.x:.3f}, {current_node.continuous_pose.y:.3f}, "
-            #     f"{current_node.continuous_pose.theta:.3f})"
-            # )
-
             # Check if pose is close enough to goal
             dx = abs(current_node.discrete_pose[0] - goal_discrete[0])
             dy = abs(current_node.discrete_pose[1] - goal_discrete[1])
@@ -339,11 +339,7 @@ class DiscreteLatticeMotionPlanner:
             )
 
             # If close enough, reconstruct command sequence and return
-            if (
-                dx <= self.goal_tolerance
-                and dy <= self.goal_tolerance
-                and dtheta <= self.goal_theta_tolerance
-            ):
+            if dx <= self.goal_tolerance and dy <= self.goal_tolerance:
                 print(f"GOAL REACHED! Nodes explored: {nodes_explored}")
                 self.nodes_explored = nodes_explored
                 self.command_sequence = self._reconstruct_path(current_node)
@@ -355,8 +351,6 @@ class DiscreteLatticeMotionPlanner:
 
             # Mark current state as closed
             closed_set.add(current_node.discrete_pose)
-
-            # Always store the parent and primitive that got us to this state
 
             # Try each motion primitive
             current_angle_idx = current_node.discrete_pose[2]
@@ -759,40 +753,20 @@ class DiscreteLatticeMotionPlanner:
         goal_theta: float,
         ax=None,
     ):
-        """Visualize the planned command sequence"""
-        # Colors for different commands
-        colors = {
-            SteeringCommand.LEFT: "red",
-            SteeringCommand.NEUTRAL: "green",
-            SteeringCommand.RIGHT: "blue",
-        }
-
-        labels = {
-            SteeringCommand.LEFT: "Left",
-            SteeringCommand.NEUTRAL: "Neutral",
-            SteeringCommand.RIGHT: "Right",
-        }
-
-        # Draw the path
         current_x, current_y, current_theta = start_x, start_y, start_theta
 
         # Add start marker
-        if ax is not None:
-            ax.plot(
-                start_x,
-                start_y,
-                "ro",
-                markersize=8,
-                label="Start",
-            )
-        else:
-            plt.plot(
-                start_x,
-                start_y,
-                "ro",
-                markersize=8,
-                label="Start",
-            )
+        if ax is None:
+            print("No axes provided for visualization")
+            return
+
+        ax.plot(
+            start_x,
+            start_y,
+            "ro",
+            markersize=8,
+            label="Start",
+        )
 
         # Store all trajectory points for continuous line
         all_trajectory_x = []
@@ -817,65 +791,43 @@ class DiscreteLatticeMotionPlanner:
 
         # Plot the continuous trajectory line
         if all_trajectory_x and all_trajectory_y:
-            if ax is not None:
-                ax.plot(
-                    all_trajectory_x,
-                    all_trajectory_y,
-                    color="green",
-                    linewidth=3,
-                    label="Trajectory",
-                )
-            else:
-                plt.plot(
-                    all_trajectory_x,
-                    all_trajectory_y,
-                    color="green",
-                    linewidth=3,
-                    label="Trajectory",
-                )
+            ax.plot(
+                all_trajectory_x,
+                all_trajectory_y,
+                color="green",
+                linewidth=3,
+                label="Trajectory",
+            )
 
         # Add goal marker
-        if ax is not None:
-            marker_transform = self.goal_tolerance * self.resolution * 2
+        marker_transform = self.goal_tolerance * self.resolution * 2
 
-            # Approximate the goal zone with a circle
-            circle = plt.Circle(
-                (goal_x, goal_y),
-                radius=marker_transform,
-                color="blue",
-                fill=True,
-                alpha=0.3,
-                label="Goal Area",
-            )
+        circle = plt.Circle(
+            (goal_x, goal_y),
+            radius=marker_transform,
+            color="blue",
+            fill=True,
+            alpha=0.3,
+            label="Goal Area",
+        )
 
-            ax.add_patch(circle)
+        ax.add_patch(circle)
 
-            # Add end marker at the actual final position
-            ax.plot(
-                current_x,
-                current_y,
-                "rx",
-                markersize=8,
-                label="End",
-            )
-        else:
-            if hasattr(self, "goal_pose"):
-                plt.add_patch(circle)
+        # Add end marker at the actual final position
+        ax.plot(
+            current_x,
+            current_y,
+            "rx",
+            markersize=8,
+            label="End",
+        )
 
-        if ax is not None:
-            ax.set_xlabel("X (m)")
-            ax.set_ylabel("Y (m)")
-            ax.set_title("Phase 1: Heading-Aware Path Planning")
-            ax.legend()
-            ax.grid(True)
-            ax.axis("equal")
-        else:
-            plt.xlabel("X (m)")
-            plt.ylabel("Y (m)")
-            plt.title("Phase 1: Heading-Aware Path Planning")
-            plt.legend()
-            plt.grid(True)
-            plt.axis("equal")
+        ax.set_xlabel("X (m)")
+        ax.set_ylabel("Y (m)")
+        ax.set_title("Phase 1: Heading-Aware Path Planning")
+        ax.legend()
+        ax.grid(True)
+        ax.axis("equal")
 
     def visualize_explored_states(self, ax):
         """Visualize the states explored by the planner."""
@@ -884,14 +836,13 @@ class DiscreteLatticeMotionPlanner:
             return
 
         # Draw occupancy grid
-        if hasattr(self.grid, "binary_grid"):
-            ax.imshow(
-                self.grid.binary_grid,
-                origin="lower",
-                extent=[0, self.grid.width, 0, self.grid.height],
-                cmap="gray_r",
-                alpha=0.3,
-            )
+        ax.imshow(
+            self.grid.binary_grid,
+            origin="lower",
+            extent=[0, self.grid.width, 0, self.grid.height],
+            cmap="gray_r",
+            alpha=0.3,
+        )
 
         # Plot explored states
         explored_x = [s.x for s in self.explored_states]
@@ -973,8 +924,8 @@ def phase2_discrete_planning(
     planner = DiscreteLatticeMotionPlanner(
         occupancy_grid=occupancy_grid,
         angular_velocity=angular_velocity,
-        steering_angle_left=25,
-        steering_angle_right=-25,
+        steering_angle_left=steering_angles,
+        steering_angle_right=-steering_angles,
         wheelbase=wheelbase,
         primitive_duration=primitive_duration,
         num_angle_discretizations=64,  # Increased angle discretization for smoother paths
@@ -982,17 +933,13 @@ def phase2_discrete_planning(
     )
 
     # Plan the command sequence
-    command_sequence = planner.plan_discrete_path(
+    planner.plan_discrete_path(
         start_pose.x,
         start_pose.y,
         start_pose.theta,
         goal_pose.x,
         goal_pose.y,
         goal_pose.theta,
-    )
-
-    planner.command_sequence = (
-        command_sequence  # Store command sequence as an attribute
     )
 
     # Store goal pose for visualization
@@ -1005,15 +952,14 @@ def phase2_discrete_planning(
         return None
 
     # Visualize the planned sequence
-    if ax is not None:
-        planner.visualize_command_sequence(
-            start_pose.x,
-            start_pose.y,
-            start_pose.theta,
-            goal_pose.x,
-            goal_pose.y,
-            goal_pose.theta,
-            ax,
-        )
+    planner.visualize_command_sequence(
+        start_pose.x,
+        start_pose.y,
+        start_pose.theta,
+        goal_pose.x,
+        goal_pose.y,
+        goal_pose.theta,
+        ax,
+    )
 
     return planner
