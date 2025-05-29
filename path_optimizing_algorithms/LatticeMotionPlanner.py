@@ -71,9 +71,9 @@ class DiscreteLatticeMotionPlanner:
         self.grid = grid  # OccupancyGrid instance
         self.angular_velocity = angular_velocity  # Fixed angular velocity when turning (rad/s)
         
-        self.wheel_base = wheelbase  # Distance between axles (m)
+        self.wheel_base = car.wheel_base  # Distance between axles (m)
         self.wheel_radius = wheelradius
-        self.reference_point = reference_point
+        self.reference_point = car.reference_point
         self.primitive_duration = primitive_duration  # Duration of each motion primitive (s)
         self.num_angles = num_angle_discretizations  # Number of discrete heading angles
 
