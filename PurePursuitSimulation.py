@@ -8,7 +8,7 @@ import matplotlib.style as mplstyle
 mplstyle.use(["dark_background", "fast"])
 
 import time
-from typing import List, Tuple, Dict, Optional, Any, TypedDict, Union
+from typing import List, Tuple, Dict, Optional, TypedDict, Union
 
 from robots.AckermannSteeringCar import AckermannSteeringCar
 from pathfinding_algorithms.ConstantPPC import ConstantPurePursuitController

@@ -7,6 +7,8 @@ import time
 from enum import Enum
 import matplotlib.pyplot as plt
 
+from robots.AckermannSteeringCar import ContinuousPose, DiscretePose
+
 
 class SteeringCommand(Enum):
     """Discrete steering commands available to the robot"""
@@ -17,55 +19,27 @@ class SteeringCommand(Enum):
 
 
 @dataclass
-class DiscreteMotionPrimitive:
+class MotionPrimitive:
     steering_command: SteeringCommand
     duration: float
-    trajectory: List[Tuple[float, float, float]]
-    end_displacement: Tuple[float, float, float]
+    trajectory: List[ContinuousPose]
+    end_displacement: ContinuousPose
     cost: float
     angular_change: float = 0.0
     turn_direction: str = "straight"
 
 
 @dataclass
-class ContinuousState:
-    """Represents an exact continuous state with full precision"""
-
-    x: float
-    y: float
-    theta: float
-
-    def __hash__(self):
-        # For use in sets/dicts - based on discrete representation
-        return hash((int(self.x * 1000), int(self.y * 1000), int(self.theta * 1000)))
-
-
-@dataclass
-class DiscreteState:
-    """Represents an exact continuous state with full precision"""
-
-    x: int
-    y: int
-    theta: int
-
-    def __hash__(self):
-        # For use in sets/dicts - based on discrete representation
-        return hash((self.x * 1000, self.y * 1000, self.theta * 1000))
-
-
-@dataclass
 class SearchNode:
     """Enhanced A* search node that maintains trajectory connectivity"""
 
-    discrete_pose: DiscreteState  # For A* indexing
-    continuous_pose: ContinuousState  # Exact continuous position
+    discrete_pose: DiscretePose  # For A* indexing
+    continuous_pose: ContinuousPose  # Exact continuous position
 
-    trajectory_segment: List[ContinuousState]  # Connecting trajectory
+    trajectory_segment: List[ContinuousPose]  # Connecting trajectory
     parent_node: Optional["SearchNode"]  # Parent node reference
 
-    primitive_used: Optional[
-        "DiscreteMotionPrimitive"
-    ]  # Primitive that led to this node
+    primitive_used: Optional["MotionPrimitive"]  # Primitive that led to this node
 
     g_score: float
     f_score: float
@@ -81,16 +55,16 @@ class DiscreteLatticeMotionPlanner:
         self,
         occupancy_grid,
         angular_velocity: float = 0.5,
-        steering_angle_left: float = 15,
-        steering_angle_right: float = -15,
+        steering_angle: float = 15,
         wheelbase: float = 0.25,
         wheelradius: float = 1,
         reference_point: str = "rear",
         primitive_duration: float = 0.5,
-        num_angle_discretizations: int = 256,  # Increased for smoother paths
-        heading_alignment_weight: float = 0.05,  # Heading alignment parameter
-        straightness_bonus: float = -0.2,  # Bonus for consecutive straight motions
+        num_angle_discretizations: int = 256,
+        heading_alignment_weight: float = 0.05,
+        straightness_bonus: float = -0.2,
         goal_alignment_threshold: float = 0.5,
+        min_progress_threshold: float = 0.0,
     ):
         """
         Initialize the discrete motion planner
@@ -118,9 +92,9 @@ class DiscreteLatticeMotionPlanner:
 
         # Fixed steering angles for left/right
         self.steering_angles = {
-            SteeringCommand.LEFT: np.radians(steering_angle_left),
+            SteeringCommand.LEFT: np.radians(steering_angle),
             SteeringCommand.NEUTRAL: 0.0,
-            SteeringCommand.RIGHT: np.radians(steering_angle_right),
+            SteeringCommand.RIGHT: np.radians(-steering_angle),
         }
 
         # Calculate linear velocities for each steering command
@@ -148,18 +122,15 @@ class DiscreteLatticeMotionPlanner:
         # Straightness bonus parameters
         self.straightness_bonus = straightness_bonus
         # Minimum progress threshold
-        self.min_progress_threshold = (
-            0.0  # Minimum progress to consider a primitive useful
-        )
+        self.min_progress_threshold = min_progress_threshold
         # Precomputed motion primitives
         self.motion_primitives = {}
         self._generate_motion_primitives()
 
-        self.explored_states: List[ContinuousState] = (
-            []
-        )  # To store states visited during search
+        # To store states visited during search
+        self.explored_states: List[ContinuousPose] = []
 
-    def calculate_goal_progress(self, primitive: DiscreteMotionPrimitive) -> float:
+    def calculate_goal_progress(self, primitive: MotionPrimitive) -> float:
         """
         Calculate the progress made by a motion primitive towards the goal.
         """
@@ -247,7 +218,7 @@ class DiscreteLatticeMotionPlanner:
                 )
 
                 # Create primitive
-                primitive = DiscreteMotionPrimitive(
+                primitive = MotionPrimitive(
                     steering_command=steering_cmd,
                     duration=self.primitive_duration,
                     trajectory=trajectory,
@@ -272,7 +243,7 @@ class DiscreteLatticeMotionPlanner:
         goal_y: float,
         goal_theta: float,
         timeout: float = 300.0,  # Increased timeout for larger grids
-    ) -> Optional[List[DiscreteMotionPrimitive]]:
+    ) -> Optional[List[MotionPrimitive]]:
         """
         Plan a sequence of discrete motion primitives from start to goal.
 
@@ -292,7 +263,7 @@ class DiscreteLatticeMotionPlanner:
         self.goal_theta = goal_theta
 
         # Discretize start and goal
-        start_continuous = ContinuousState(start_x, start_y, start_theta)
+        start_continuous = ContinuousPose(start_x, start_y, start_theta)
         start_discrete = self._discretize_state(start_x, start_y, start_theta)
         goal_discrete = self._discretize_state(goal_x, goal_y, goal_theta)
 
@@ -391,7 +362,7 @@ class DiscreteLatticeMotionPlanner:
                 )
 
                 # Create exact next pose
-                next_continuous_state = ContinuousState(next_x, next_y, next_theta)
+                next_continuous_state = ContinuousPose(next_x, next_y, next_theta)
 
                 next_discrete_state = self._discretize_state(next_x, next_y, next_theta)
 
@@ -481,7 +452,7 @@ class DiscreteLatticeMotionPlanner:
         print("No path found before empty/timeout")
         return None
 
-    def _reconstruct_path(self, goal_node: SearchNode) -> List[DiscreteMotionPrimitive]:
+    def _reconstruct_path(self, goal_node: SearchNode) -> List[MotionPrimitive]:
         """
         Reconstruct the sequence of motion primitives with guaranteed connectivity
         """
@@ -566,7 +537,7 @@ class DiscreteLatticeMotionPlanner:
             )
             self.connectivity_verified = False
 
-    def _discretize_state(self, x: float, y: float, theta: float) -> DiscreteState:
+    def _discretize_state(self, x: float, y: float, theta: float) -> DiscretePose:
         """Convert continuous state to discrete indices"""
         x_idx: int = math.floor(x / self.resolution)
         y_idx: int = math.floor(y / self.resolution)
@@ -596,7 +567,7 @@ class DiscreteLatticeMotionPlanner:
         start_x: float,
         start_y: float,
         start_theta: float,
-        primitive: DiscreteMotionPrimitive,
+        primitive: MotionPrimitive,
     ) -> bool:
         """Check if executing this primitive from start position is collision-free"""
         # Vehicle dimensions and safety margin (in meters)
@@ -719,9 +690,7 @@ class DiscreteLatticeMotionPlanner:
         else:
             return "neutral"  # Minimal change in alignment
 
-    def execute_command_sequence(
-        self, car, command_sequence: List[DiscreteMotionPrimitive]
-    ):
+    def execute_command_sequence(self, car, command_sequence: List[MotionPrimitive]):
         """
         Execute the planned command sequence on the car.
         This shows how to convert primitives to actual car commands.
@@ -866,9 +835,9 @@ class DiscreteLatticeMotionPlanner:
 
 
 def apply_motion_primitive(
-    current_pose: ContinuousState,
-    motion_primitive: ContinuousState,
-) -> ContinuousState:
+    current_pose: ContinuousPose,
+    motion_primitive: ContinuousPose,
+) -> ContinuousPose:
     if isinstance(current_pose, tuple):
         x, y, theta = current_pose
     else:
@@ -908,7 +877,7 @@ def phase2_discrete_planning(
     angular_velocity=0.5,
     wheelbase=0.25,
     primitive_duration=0.5,  # Increased duration for better path finding
-) -> List[DiscreteMotionPrimitive]:
+) -> List[MotionPrimitive]:
     """
     Plan the optimal discrete command sequence for Phase 2
 

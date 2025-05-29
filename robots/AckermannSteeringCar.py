@@ -1,5 +1,32 @@
+from dataclasses import dataclass
 import numpy as np
 from typing import List, Tuple
+
+
+@dataclass
+class DiscretePose:
+    """Represents an exact continuous state with full precision"""
+
+    x: int
+    y: int
+    theta: int
+
+    def __hash__(self):
+        # For use in sets/dicts - based on discrete representation
+        return hash((self.x * 1000, self.y * 1000, self.theta * 1000))
+
+
+@dataclass
+class ContinuousPose:
+    """Represents an exact continuous state with full precision"""
+
+    x: float
+    y: float
+    theta: float
+
+    def __hash__(self):
+        # For use in sets/dicts - based on discrete representation
+        return hash((int(self.x * 1000), int(self.y * 1000), int(self.theta * 1000)))
 
 
 class AckermannSteeringCar:
@@ -24,27 +51,20 @@ class AckermannSteeringCar:
 
     def __init__(
         self,
-        x: float = 0.0,
-        y: float = 0.0,
-        theta: float = 0.0,
-        wheelbase: float = 0.25,  # Distance between front and rear axles (meters)
+        start_pose: ContinuousPose,
+        wheelbase: float = 0.25,
         wheel_radius: float = 0.05,
-        wheel_width: float = 0.04,  # Width of wheel (meters)
-        wheel_offset: float = 0.03,  # How far wheels extend beyond the body width (meters)
-        max_steering_angle: float = np.radians(
-            35
-        ),  # Max steering angle in radians (~35 degrees)
+        wheel_width: float = 0.04,
+        wheel_offset: float = 0.03,
+        max_steering_angle: float = np.radians(35),
         max_angular_velocity: float = 1.0,
-        length: float = 0.3,  # Car length (meters)
-        width: float = 0.2,  # Car width (meters)
+        length: float = 0.3,
+        width: float = 0.2,
+        reference_point: str = "rear",
     ) -> None:
-        # State variables
-        self.x: float = x  # Position x (meters)
-        self.y: float = y  # Position y (meters)
-        self.theta: float = theta  # Orientation (radians)
-        self.steering_angle: float = 0.0  # Front wheel steering angle (radians)
-
         # Physical parameters
+        self.length: float = length  # Car length (meters)
+        self.width: float = width  # Car width (meters)
         self.wheelbase: float = (
             wheelbase  # Distance between front and rear axles (meters)
         )
@@ -53,22 +73,20 @@ class AckermannSteeringCar:
         self.wheel_offset: float = (
             wheel_offset  # How far wheels extend beyond the body (meters)
         )
+        # Physical constraints
         self.max_steering_angle: float = (
             max_steering_angle  # Maximum steering angle (rad)
         )
         self.max_angular_velocity: float = (
             max_angular_velocity  # Maximum angular velocity (rad/s)
         )
-
-        # Control variables
+        # State variables
+        self.pose = start_pose  # (x, y, theta)
+        self.steering_angle: float = 0.0  # Front wheel steering angle (radians)
         self.v: float = 0.0  # Linear velocity (m/s)
         self.omega: float = (
             0.0  # Angular velocity (rad/s) - derived from steering angle and velocity
         )
-
-        # Car dimensions (rectangular shape)
-        self.length: float = length  # Car length (meters)
-        self.width: float = width  # Car width (meters)
 
     def update_state(self, dt: float):
         """
@@ -80,8 +98,7 @@ class AckermannSteeringCar:
         Parameters:
         dt: Time step in seconds
         """
-        # Calculate angular velocity from steering angle (bicycle model)
-        # θ̇ = v * tan(φ) / L
+        # Calculate angular velocity from steering angle (bicycle model) θ̇ = v * tan(φ) / L
         if abs(self.v) > 1e-5:  # Only update angular velocity if car is moving
             self.omega = self.v * np.tan(self.steering_angle) / self.wheelbase
         else:
@@ -90,10 +107,14 @@ class AckermannSteeringCar:
         # Update state using Ackermann kinematics
         self.x += self.v * np.cos(self.theta) * dt
         self.y += self.v * np.sin(self.theta) * dt
-        self.theta += self.omega * dt
+        self.theta = self.get_principal_value(self.theta + self.omega * dt)
 
-        # Normalize theta to (-pi, pi) to prevent growing continuously
-        self.theta = np.arctan2(np.sin(self.theta), np.cos(self.theta))
+    @staticmethod
+    def get_principal_value(angle: float) -> float:
+        """
+        Normalize theta to [-π, π] to prevent growing continuously
+        """
+        return np.arctan2(np.sin(angle), np.cos(angle))
 
     def set_control_inputs(self, v: float, steering_angle: float):
         """
@@ -115,30 +136,33 @@ class AckermannSteeringCar:
         Returns a list of (x,y) coordinates for the four corners of the car,
         taking into account its position, orientation, length, and width
         """
+        x, y, theta = self.pose.x, self.pose.y, self.pose.theta
+        width, length = self.width, self.length
+
         # Calculate the four corners of the car based on position, orientation, length, and width
-        cos_theta = np.cos(self.theta)
-        sin_theta = np.sin(self.theta)
+        cos_theta = np.cos(theta)
+        sin_theta = np.sin(theta)
 
         # Calculate the corners relative to the car's position and orientation
         # Using rotation matrix to transform from car frame to world frame
         front_right = (
-            self.x + self.length / 2 * cos_theta - self.width / 2 * sin_theta,
-            self.y + self.length / 2 * sin_theta + self.width / 2 * cos_theta,
+            x + length / 2 * cos_theta - width / 2 * sin_theta,
+            y + length / 2 * sin_theta + width / 2 * cos_theta,
         )
 
         front_left = (
-            self.x + self.length / 2 * cos_theta + self.width / 2 * sin_theta,
-            self.y + self.length / 2 * sin_theta - self.width / 2 * cos_theta,
+            x + length / 2 * cos_theta + width / 2 * sin_theta,
+            y + length / 2 * sin_theta - width / 2 * cos_theta,
         )
 
         rear_left = (
-            self.x - self.length / 2 * cos_theta + self.width / 2 * sin_theta,
-            self.y - self.length / 2 * sin_theta - self.width / 2 * cos_theta,
+            x - length / 2 * cos_theta + width / 2 * sin_theta,
+            y - length / 2 * sin_theta - width / 2 * cos_theta,
         )
 
         rear_right = (
-            self.x - self.length / 2 * cos_theta - self.width / 2 * sin_theta,
-            self.y - self.length / 2 * sin_theta + self.width / 2 * cos_theta,
+            x - length / 2 * cos_theta - width / 2 * sin_theta,
+            y - length / 2 * sin_theta + width / 2 * cos_theta,
         )
 
         return [front_right, front_left, rear_left, rear_right]
@@ -153,26 +177,24 @@ class AckermannSteeringCar:
         coordinates of the lines that visualize the front wheels with their
         steering angle.
         """
-        cos_theta = np.cos(self.theta)
-        sin_theta = np.sin(self.theta)
+        x, y, theta = self.pose.x, self.pose.y, self.pose.theta
+        width, length = self.width, self.length
+        wheel_offset = self.wheel_offset
+
+        cos_theta = np.cos(theta)
+        sin_theta = np.sin(theta)
 
         # Front axle center - position at the front edge of the car
-        front_center_x = self.x + (self.length / 2) * cos_theta
-        front_center_y = self.y + (self.length / 2) * sin_theta
+        front_center_x = x + (length / 2) * cos_theta
+        front_center_y = y + (length / 2) * sin_theta
 
         # Calculate wheel positions (centers of front wheels)
         # Position the wheels at the sides of the car PLUS the offset
-        left_wheel_x = (
-            front_center_x + (self.width / 2 + self.wheel_offset) * -sin_theta
-        )
-        left_wheel_y = front_center_y + (self.width / 2 + self.wheel_offset) * cos_theta
+        left_wheel_x = front_center_x + (width / 2 + wheel_offset) * -sin_theta
+        left_wheel_y = front_center_y + (width / 2 + wheel_offset) * cos_theta
 
-        right_wheel_x = (
-            front_center_x + (self.width / 2 + self.wheel_offset) * sin_theta
-        )
-        right_wheel_y = (
-            front_center_y + (self.width / 2 + self.wheel_offset) * -cos_theta
-        )
+        right_wheel_x = front_center_x + (width / 2 + wheel_offset) * sin_theta
+        right_wheel_y = front_center_y + (width / 2 + wheel_offset) * -cos_theta
 
         # Calculate the direction of the wheels
         wheel_angle = self.theta + self.steering_angle

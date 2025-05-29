@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathfinding_algorithms.ConstantPPC import ConstantPurePursuitController
 from path_optimizing_algorithms.LatticeMotionPlanner import (
     DiscreteLatticeMotionPlanner,
-    DiscreteMotionPrimitive,
+    MotionPrimitive,
     SteeringCommand,
 )
 
@@ -76,13 +76,13 @@ class Phase2Controller:
         )
 
         # Planned trajectory data
-        self.command_sequence: List[DiscreteMotionPrimitive] = []
+        self.command_sequence: List[MotionPrimitive] = []
         self.reference_trajectory: List[Tuple[float, float]] = []
         self.trajectory_timestamps: List[float] = []
 
         # Execution tracking
         self.execution_start_time: float = 0.0
-        self.current_target_primitive: Optional[DiscreteMotionPrimitive] = None
+        self.current_target_primitive: Optional[MotionPrimitive] = None
 
         # Performance monitoring
         self.deviation_history: List[float] = []
@@ -90,7 +90,7 @@ class Phase2Controller:
 
     def set_planned_trajectory(
         self,
-        command_sequence: List[DiscreteMotionPrimitive],
+        command_sequence: List[MotionPrimitive],
         start_pose: Tuple[float, float, float],
     ):
         """
@@ -116,7 +116,7 @@ class Phase2Controller:
 
     def _extract_reference_trajectory(
         self,
-        command_sequence: List[DiscreteMotionPrimitive],
+        command_sequence: List[MotionPrimitive],
         start_pose: Tuple[float, float, float],
     ) -> List[Tuple[float, float]]:
         """

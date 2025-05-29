@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.style as mplstyle
 
 from pathfinding_algorithms.ConstantPPC import ConstantPurePursuitController
-from robots.AckermannSteeringCar import AckermannSteeringCar
+from robots.AckermannSteeringCar import AckermannSteeringCar, ContinuousPose
 
 mplstyle.use(["dark_background", "fast"])
 
@@ -21,18 +21,9 @@ from path_optimizing_algorithms.LatticeMotionPlanner import (
 import numpy as np
 
 
-@dataclass
-class Pose:
-    """A simple pose class to represent a position and orientation in 2D space."""
-
-    x: float
-    y: float
-    theta: float
-
-
 def generate_grid(
     width: int, height: int, grid_type: str = "empty"
-) -> tuple[OccupancyGrid, Pose, Pose]:
+) -> tuple[OccupancyGrid, ContinuousPose, ContinuousPose]:
     # Generate an empty grid with resolution that balances accuracy and performance
     grid = OccupancyGrid(
         width=width,
@@ -140,45 +131,13 @@ def generate_grid(
 
     return (
         grid,
-        Pose(start_x, start_y, np.pi / 6),
-        Pose(goal_x, goal_y, np.pi / 6),
+        ContinuousPose(start_x, start_y, np.pi / 6),
+        ContinuousPose(goal_x, goal_y, np.pi / 6),
     )
-
-
-def test_phase2() -> None:
-    # Phase 2: Racing Line Optimization
-    # Assuming we have a fully mapped environment and want to optimize the path for racing
-    # The real car is constrained by discrete steering angles, fixed angular velocity, and discrete commands
-    # Making this problem a motion planning problem, instead of a trajectory optimization problem
-    # The DiscreteLatticeMotionPlanner discretizes the continuous space making this a graph search problem
-    # So we can use A* search on a lattice of possible states
-
-    # Initialize the occupancy grid
-    print("=== TESTING PHASE 2 ===")
-    # print("=== PHASE 2: RACING LINE OPTIMIZATION ===")
-    grid_width = 20
-    grid_height = 20
-    grid, start_pose, goal_pose = generate_grid(
-        grid_width, grid_height, "aligned corridor"
-    )
-
-    car = AckermannSteeringCar(x=0.5, y=0.5, theta=0.0)
-
-    sim = Simulation(car=car, grid=grid, start_pose=start_pose, goal_pose=goal_pose)
-
-    # Intermediate Phase: Planning
-    integrated_controller = transition_to_phase2(sim, start_pose, goal_pose)
-
-    if integrated_controller:
-        # Phase 2: Execution
-        execute_phase2(sim, integrated_controller)  # Commented out by user
-        pass
-    else:
-        print("Phase 2 planning failed!")
 
 
 def transition_to_phase2(
-    simulation, start_pose: Pose | None, goal_pose: Pose | None
+    simulation, start_pose: ContinuousPose, goal_pose: ContinuousPose
 ) -> Phase2Controller:
     """
     Transition from Phase 1 exploration to Phase 2 execution
@@ -196,32 +155,18 @@ def transition_to_phase2(
     print("Processing occupancy grid...")
     # simulation.grid.process_map()  # Clean up noise from exploration
 
-    # Step 2: Define start and goal for Phase 2
-    # In a real competition, this might be the same start/finish line
-    if start_pose is None:
-        start_pose = start_pose
-
-    # For demonstration, let's set a goal position
-    # In practice, this might be the finish line or a lap completion point
-    if goal_pose is None:
-        goal_pose = goal_pose
-
-    print(f"Planning from {start_pose} to {goal_pose}")
     fig, ax = plt.subplots(1, 1, figsize=(12, 10))
 
     # Step 3: Create and configure the lattice planner
     lattice_planner = DiscreteLatticeMotionPlanner(
         occupancy_grid=simulation.grid,
         angular_velocity=0.8,  # Faster for Phase 2
-        steering_angle_left=20,  # Degrees
-        steering_angle_right=-20,
+        steering_angle=20,  # Degrees
         wheelbase=0.25,
         primitive_duration=0.4,  # Shorter for more responsive control
         num_angle_discretizations=64,  # Higher resolution for smoother paths
+        min_progress_threshold=0.01,
     )
-
-    # Set the minimum progress threshold
-    lattice_planner.min_progress_threshold = 0.01
 
     # Step 4: Plan the optimal trajectory
     print("Planning optimal trajectory...")
@@ -234,11 +179,6 @@ def transition_to_phase2(
         goal_pose.theta,
         timeout=2500.0,  # Allow more time for complex paths
     )
-
-    # Test the calculate_goal_progress method
-    primitive = lattice_planner.motion_primitives[0][SteeringCommand.NEUTRAL]
-    progress = lattice_planner.calculate_goal_progress(primitive)
-    print(f"Goal progress for neutral primitive: {progress}")
 
     if not command_sequence:
         print("ERROR: Could not find path for Phase 2!")
@@ -304,6 +244,13 @@ def transition_to_phase2(
             f.write(f"Found optimal path with {len(command_sequence)} commands\n")
             f.write(
                 f"Simulated time: {len(command_sequence) * lattice_planner.primitive_duration:.3f}s\n"
+            )
+
+            print(f"\nPath planning completed in {time.time() - start_time:.3f}s")
+            print(f"States explored: {lattice_planner.nodes_explored}")
+            print(f"Found optimal path with {len(command_sequence)} commands")
+            print(
+                f"Simulated time: {len(command_sequence) * lattice_planner.primitive_duration:.3f}s"
             )
 
         # Save the plot to a file
@@ -412,4 +359,32 @@ def execute_phase2(simulation, integrated_controller):
 
 
 if __name__ == "__main__":
-    test_phase2()
+    # Phase 2: Racing Line Optimization
+    # Assuming we have a fully mapped environment and want to optimize the path for racing
+    # The real car is constrained by discrete steering angles, fixed angular velocity, and discrete commands
+    # Making this problem a motion planning problem, instead of a trajectory optimization problem
+    # The DiscreteLatticeMotionPlanner discretizes the continuous space making this a graph search problem
+    # So we can use A* search on a lattice of possible states
+
+    # Initialize the occupancy grid
+    print("=== TESTING PHASE 2 ===")
+    # print("=== PHASE 2: RACING LINE OPTIMIZATION ===")
+    grid_width = 20
+    grid_height = 20
+    grid, start_pose, goal_pose = generate_grid(
+        grid_width, grid_height, "aligned corridor"
+    )
+
+    car = AckermannSteeringCar(start_pose, reference_point="rear")
+
+    sim = Simulation(car=car, grid=grid, start_pose=start_pose, goal_pose=goal_pose)
+
+    # Intermediate Phase: Planning
+    integrated_controller = transition_to_phase2(sim, start_pose, goal_pose)
+
+    if integrated_controller:
+        # Phase 2: Execution
+        execute_phase2(sim, integrated_controller)
+        pass
+    else:
+        print("Phase 2 planning failed!")

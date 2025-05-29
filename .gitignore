@@ -6,3 +6,4 @@ __pycache__/
 .vscode/*
 .clinerules/
 saved_simulations/
+diff.txt
