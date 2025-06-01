@@ -94,8 +94,8 @@ class SimulationState:
         """
         self.positions.append((car.x, car.y))
         self.headings.append(car.theta)
-        self.velocities.append(car.v)
-        self.steering_angles.append(car.steering_angle)
+        self.velocities.append(car.linear_velocity)
+        self.steering_angles.append(car.wheel_steering_angle)
 
         # Get target point if available
         # The get_target_point method returns a tuple of (Optional[float], Optional[float], int)
@@ -202,9 +202,7 @@ class SimulationState:
         if index < 0 or index >= len(self.positions):
             return {}
 
-        state: Dict[
-            str, Union[float, Tuple[float, float], Optional[Tuple[float, float]]]
-        ] = {
+        state: Dict[str, Union[float, Tuple[float, float], Optional[Tuple[float, float]]]] = {
             "position": self.positions[index],
             "heading": self.headings[index],
             "velocity": self.velocities[index],
@@ -321,12 +319,8 @@ class PurePursuitSimulation:
         )
 
         # Configure visualization elements based on config
-        self.viz.enable_element(
-            "car_body", self.config.visualization_config["show_car_body"]
-        )
-        self.viz.enable_element(
-            "wheels", self.config.visualization_config["show_wheels"]
-        )
+        self.viz.enable_element("car_body", self.config.visualization_config["show_car_body"])
+        self.viz.enable_element("wheels", self.config.visualization_config["show_wheels"])
         self.viz.enable_element(
             "steering_lines", self.config.visualization_config["show_steering_lines"]
         )
@@ -402,9 +396,7 @@ class PurePursuitSimulation:
         """
         if self.viz:
             trajectory_drawer = self.viz.get_element("trajectory")
-            if isinstance(
-                trajectory_drawer, TrajectoryDrawer
-            ):  # Ensure it's a TrajectoryDrawer
+            if isinstance(trajectory_drawer, TrajectoryDrawer):  # Ensure it's a TrajectoryDrawer
                 trajectory_drawer.add_position(x, y)
 
     def reset_simulation(self):
@@ -425,15 +417,13 @@ class PurePursuitSimulation:
             self.car.x = self.path[0][0]
             self.car.y = self.path[0][1]
             self.car.theta = 0.0  # Initial heading (can be customized)
-            self.car.v = 0.0  # Initial velocity
+            self.car.linear_velocity = 0.0  # Initial velocity
 
         # Reset visualization
         if self.viz:
             # Clear trajectory
             trajectory_drawer = self.viz.get_element("trajectory")
-            if isinstance(
-                trajectory_drawer, TrajectoryDrawer
-            ):  # Ensure it's a TrajectoryDrawer
+            if isinstance(trajectory_drawer, TrajectoryDrawer):  # Ensure it's a TrajectoryDrawer
                 trajectory_drawer.set_positions([])
 
             # Reset other visualization elements as needed
@@ -491,7 +481,9 @@ class PurePursuitSimulation:
 
             if distance_to_goal < self.config.stopping_criteria["goal_distance"]:
                 self.simulation_complete = True
-                self.completion_reason = f"Goal reached after {self.step_count} steps, time {self.current_time:.2f}s"
+                self.completion_reason = (
+                    f"Goal reached after {self.step_count} steps, time {self.current_time:.2f}s"
+                )
                 if self.config.debug_mode:
                     print(self.completion_reason)
                 return True
@@ -499,7 +491,9 @@ class PurePursuitSimulation:
         # Check timeout
         if self.current_time > self.config.stopping_criteria["timeout"]:
             self.simulation_complete = True
-            self.completion_reason = f"Simulation timeout after {self.step_count} steps, time {self.current_time:.2f}s"
+            self.completion_reason = (
+                f"Simulation timeout after {self.step_count} steps, time {self.current_time:.2f}s"
+            )
             if self.config.debug_mode:
                 print(self.completion_reason)
             return True
@@ -507,7 +501,9 @@ class PurePursuitSimulation:
         # Check if we've exceeded the maximum number of steps
         if self.step_count >= self.config.max_steps:
             self.simulation_complete = True
-            self.completion_reason = f"Maximum steps ({self.config.max_steps}) reached, time {self.current_time:.2f}s"
+            self.completion_reason = (
+                f"Maximum steps ({self.config.max_steps}) reached, time {self.current_time:.2f}s"
+            )
             if self.config.debug_mode:
                 print(self.completion_reason)
             return True
@@ -628,12 +624,8 @@ class PurePursuitSimulation:
 
         # Plot target points
         if results["target_points"] and results["target_points"][0] is not None:
-            target_x = [
-                p[0] for p in results["target_points"] if p is not None and len(p) >= 2
-            ]
-            target_y = [
-                p[1] for p in results["target_points"] if p is not None and len(p) >= 2
-            ]
+            target_x = [p[0] for p in results["target_points"] if p is not None and len(p) >= 2]
+            target_y = [p[1] for p in results["target_points"] if p is not None and len(p) >= 2]
             plt.scatter(target_x, target_y, c="g", s=20, label="Target Points")
 
         plt.title("Path Following")
@@ -766,10 +758,7 @@ class PurePursuitSimulation:
                 velocities=np.array(results["velocities"]),
                 steering_angles=np.array(results["steering_angles"]),
                 target_points=np.array(
-                    [
-                        p if p is not None else (np.nan, np.nan)
-                        for p in results["target_points"]
-                    ]
+                    [p if p is not None else (np.nan, np.nan) for p in results["target_points"]]
                 ),
                 path=np.array(self.path),
             )

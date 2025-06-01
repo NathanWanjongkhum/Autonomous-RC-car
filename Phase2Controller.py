@@ -104,9 +104,7 @@ class Phase2Controller:
         self.state.current_primitive_index = 0
 
         # Convert discrete command sequence to continuous reference trajectory
-        self.reference_trajectory = self._extract_reference_trajectory(
-            command_sequence, start_pose
-        )
+        self.reference_trajectory = self._extract_reference_trajectory(command_sequence, start_pose)
 
         # Set the reference trajectory for pure pursuit
         self.pure_pursuit.set_path(self.reference_trajectory)
@@ -276,9 +274,7 @@ class Phase2Controller:
             return 0.0, 0.0
 
         # Execute the discrete command with some pure pursuit smoothing
-        discrete_steering = self.lattice_planner.steering_angles[
-            current_primitive.steering_command
-        ]
+        discrete_steering = self.lattice_planner.steering_angles[current_primitive.steering_command]
         discrete_velocity = self.lattice_planner.linear_velocity
 
         # Apply minor corrections using pure pursuit
@@ -286,19 +282,15 @@ class Phase2Controller:
             current_pose[0],
             current_pose[1],
             current_pose[2],
-            self.lattice_planner.wheel_base,
+            self.lattice_planner.car.wheel_base,
             dt,
         )
 
         # Blend discrete command with pure pursuit correction
         # Higher weight on discrete command when deviation is low
-        blend_factor = max(
-            0.1, 1.0 - (self.state.path_deviation / self.max_path_deviation)
-        )
+        blend_factor = max(0.1, 1.0 - (self.state.path_deviation / self.max_path_deviation))
 
-        final_steering = (
-            blend_factor * discrete_steering + (1 - blend_factor) * pp_steering
-        )
+        final_steering = blend_factor * discrete_steering + (1 - blend_factor) * pp_steering
         final_velocity = discrete_velocity  # Keep planned velocity
 
         return final_steering, final_velocity
@@ -316,7 +308,7 @@ class Phase2Controller:
             current_pose[0],
             current_pose[1],
             current_pose[2],
-            self.lattice_planner.wheel_base,
+            self.lattice_planner.car.wheel_base,
             dt,
         )
 
@@ -333,7 +325,7 @@ class Phase2Controller:
             current_pose[0],
             current_pose[1],
             current_pose[2],
-            self.lattice_planner.wheel_base,
+            self.lattice_planner.car.wheel_base,
             dt,
         )
 
@@ -366,9 +358,7 @@ class Phase2Controller:
 
         # For now, fall back to aggressive pure pursuit
         # In a full implementation, this would trigger local replanning
-        steering, velocity = self._execute_error_correction(
-            current_pose, current_time, dt
-        )
+        steering, velocity = self._execute_error_correction(current_pose, current_time, dt)
 
         # Transition back to normal modes once deviation decreases
         if self.state.path_deviation < self.max_path_deviation:
@@ -391,9 +381,7 @@ class Phase2Controller:
                 self.state.current_primitive_index / max(1, len(self.command_sequence))
             ),
             "emergency_stops": sum(
-                1
-                for mode in self.control_mode_history
-                if mode == ControlMode.REPLANNING
+                1 for mode in self.control_mode_history if mode == ControlMode.REPLANNING
             ),
         }
 

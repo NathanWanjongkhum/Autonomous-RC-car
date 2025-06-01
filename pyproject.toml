@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "Autonomous-RC-car"
+version = "2025.0.0"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "scipy",
+    "opencv-python",
+    "pandas",
+]
+requires-python = ">=3.8"
+authors = [
+  { name="Nathan Wanjongkhum", email="wanjongkhumnathan@gmail.com" }, 
+]
+description = "A RC car simulator with discrete steering angles and lattice motion planning"
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[tool.black]
+line-length = 100
+
+[project.urls]
+"Homepage" = "https://github.com/NathanWanjongkhum/Autonomous-RC-car"

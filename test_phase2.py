@@ -62,9 +62,7 @@ def generate_grid(
             # Gap in the middle of the wall
             for x in list(range(adjusted_width // 4 - 1, adjusted_width // 4 + 1)):
                 for y in list(
-                    range(
-                        math.floor(adjusted_height / 4), math.floor(adjusted_height / 2)
-                    )
+                    range(math.floor(adjusted_height / 4), math.floor(adjusted_height / 2))
                 ):
                     grid.binary_grid[x, y] = False
 
@@ -75,9 +73,7 @@ def generate_grid(
 
             # Gap in the middle of the wall
             for x in list(range(adjusted_width // 2 - 1, adjusted_width // 2 + 1)):
-                for y in list(
-                    range(math.floor(3 * adjusted_height / 4), adjusted_height - 1)
-                ):
+                for y in list(range(math.floor(3 * adjusted_height / 4), adjusted_height - 1)):
                     grid.binary_grid[x, y] = False
         case "obstacles":
             # Outer walls
@@ -90,18 +86,14 @@ def generate_grid(
 
             # Add some obstacles that allow a path, defined in world coordinates
             # A few blocks in the top-left (relative to world dimensions)
-            ox1, oy1 = grid._discretize_state(
-                adjusted_width * 0.2, adjusted_height * 0.2
-            )
+            ox1, oy1 = grid._discretize_state(adjusted_width * 0.2, adjusted_height * 0.2)
             grid.binary_grid[oy1, ox1] = 1
             grid.binary_grid[oy1 + 1, ox1] = 1
             grid.binary_grid[oy1, ox1 + 1] = 1
             grid.binary_grid[oy1 + 1, ox1 + 1] = 1
 
             # A few blocks in the bottom-right (relative to world dimensions)
-            ox2, oy2 = grid._discretize_state(
-                adjusted_width * 0.8, adjusted_height * 0.8
-            )
+            ox2, oy2 = grid._discretize_state(adjusted_width * 0.8, adjusted_height * 0.8)
             grid.binary_grid[oy2, ox2] = 1
             grid.binary_grid[oy2 + 1, ox2] = 1
             grid.binary_grid[oy2, ox2 + 1] = 1
@@ -114,9 +106,7 @@ def generate_grid(
             obs_y_world = adjusted_height / 2
 
             # Convert to grid coordinates
-            obs_start_x_grid, obs_y_grid = grid._discretize_state(
-                obs_start_x_world, obs_y_world
-            )
+            obs_start_x_grid, obs_y_grid = grid._discretize_state(obs_start_x_world, obs_y_world)
             obs_end_x_grid, _ = grid._discretize_state(obs_end_x_world, obs_y_world)
 
             for i in range(obs_start_x_grid, obs_end_x_grid + 1):
@@ -162,8 +152,8 @@ def transition_to_phase2(
         car=simulation.car,
         grid=simulation.grid,
         angular_velocity=0.8,  # Faster for Phase 2
-        primitive_duration=0.1,  
-        num_angle_discretizations=64, 
+        primitive_duration=0.1,
+        num_angle_discretizations=64,
         min_progress_threshold=0.0,
     )
 
@@ -176,119 +166,82 @@ def transition_to_phase2(
         goal_pose.x,
         goal_pose.y,
         goal_pose.theta,
-        timeout=2500.0,  # Allow more time for complex paths
+        timeout=2500.0,
     )
 
     if not command_sequence:
         print("ERROR: Could not find path for Phase 2!")
         return None
 
-    if command_sequence:
-        # Extract trajectory from command sequence
-        trajectory = []
-        current_x, current_y, current_theta = (
-            start_pose.x,
-            start_pose.y,
-            start_pose.theta,
-        )
-
-        for primitive in command_sequence:
-            # Transform each point in the primitive's trajectory to world coordinates
-            for x_local, y_local, theta_local in primitive.trajectory:
-                # Transform from primitive's local frame to world frame
-                x_world, y_world, _ = apply_motion_primitive(
-                    (current_x, current_y, current_theta),
-                    (x_local, y_local, theta_local),
-                )
-
-                trajectory.append((x_world, y_world))
-
-            # Update current position using the primitive's end displacement
-            current_x, current_y, current_theta = apply_motion_primitive(
-                (current_x, current_y, current_theta), primitive.end_displacement
-            )
-
-        lattice_planner.visualize_command_sequence(
-            start_x=start_pose.x,
-            start_y=start_pose.y,
-            start_theta=start_pose.theta,
-            goal_x=goal_pose.x,
-            goal_y=goal_pose.y,
-            goal_theta=goal_pose.theta,
-            ax=ax,
-        )
-
-        lattice_planner.visualize_explored_states(ax=ax)
-
-        # Save tuning parameters to a file
-        tuning_params = {
-            "angular_velocity": lattice_planner.angular_velocity,
-            "steering_angle_left": lattice_planner.steering_angles[
-                SteeringCommand.LEFT
-            ],
-            "steering_angle_right": lattice_planner.steering_angles[
-                SteeringCommand.RIGHT
-            ],
-            "wheelbase": lattice_planner.wheel_base,
-            "primitive_duration": lattice_planner.primitive_duration,
-            "num_angle_discretizations": lattice_planner.num_angles,
-        }
-        filename = "saved_simulations/tuning_params.txt"
-        with open(filename, "w") as f:
-            for key, value in tuning_params.items():
-                f.write(f"{key}: {value}\n")
-
-            f.write(f"\nPath planning completed in {time.time() - start_time:.3f}s\n")
-            f.write(f"States explored: {lattice_planner.nodes_explored}\n")
-            f.write(f"Found optimal path with {len(command_sequence)} commands\n")
-            f.write(
-                f"Simulated time: {len(command_sequence) * lattice_planner.primitive_duration:.3f}s\n"
-            )
-
-            print(f"\nPath planning completed in {time.time() - start_time:.3f}s")
-            print(f"States explored: {lattice_planner.nodes_explored}")
-            print(f"Found optimal path with {len(command_sequence)} commands")
-            print(
-                f"Simulated time: {len(command_sequence) * lattice_planner.primitive_duration:.3f}s"
-            )
-
-        # Save the plot to a file
-        plot_filename = "saved_simulations/trajectory_plot.png"
-        fig.savefig(plot_filename)
-
-        plt.show(block=True)
-
-        print("Displaying occupancy grid and markers. Close the plot to continue.")
-    else:
-        print("No path found by LatticeMotionPlanner.")
-        print("Visualizing explored states...")
-
-    # Step 5: Create the pure pursuit controller
-    pure_pursuit = ConstantPurePursuitController(
-        angular_velocity=0.8,  # Match lattice planner
-        base_lookahead=0.6,  # Larger lookahead for higher speeds
-        hysteresis_threshold=5.0,  # Tighter for precision
-        dead_zone_threshold=2.0,  # Smaller dead zone
-        max_integral_degrees=15.0,  # More aggressive correction
-        feedforward_lookahead_points=7,  # Look further ahead
+    lattice_planner.visualize_command_sequence(
+        start_x=start_pose.x,
+        start_y=start_pose.y,
+        start_theta=start_pose.theta,
+        goal_x=goal_pose.x,
+        goal_y=goal_pose.y,
+        goal_theta=goal_pose.theta,
+        ax=ax,
     )
 
-    # Step 6: Create the integrated controller
+    lattice_planner.visualize_explored_states(ax=ax)
+
+    # Save tuning parameters to a file
+    save_results(start_time, lattice_planner, command_sequence)
+
+    # Save the plot to a file
+    plot_filename = "saved_simulations/trajectory_plot.png"
+    fig.savefig(plot_filename)
+
+    plt.show(block=True)
+
+    print("Displaying occupancy grid and markers. Close the plot to continue.")
+
+    # Create the pure pursuit controller
+    pure_pursuit = ConstantPurePursuitController(
+        angular_velocity=lattice_planner.car.wheel_angular_velocity,
+        base_lookahead=0.6,
+        hysteresis_threshold=5.0,
+        dead_zone_threshold=2.0,
+        max_integral_degrees=15.0,
+        feedforward_lookahead_points=7,
+    )
+
+    # Create the integrated controller
     integrated_controller = Phase2Controller(
         lattice_planner=lattice_planner,
         pure_pursuit=pure_pursuit,
-        max_path_deviation=0.8,  # Tighter tolerance for racing
-        replan_interval=2.0,  # Faster replanning
-        emergency_deviation=1.0,  # Emergency threshold
+        max_path_deviation=0.8,
+        replan_interval=2.0,
+        emergency_deviation=1.0,
     )
 
-    # Step 7: Set the planned trajectory
+    # Set the planned trajectory
     integrated_controller.set_planned_trajectory(
         command_sequence, (start_pose.x, start_pose.y, start_pose.theta)
     )
 
     print("=== READY FOR PHASE 2 EXECUTION ===")
     return integrated_controller
+
+
+def save_results(start_time, lattice_planner, command_sequence):
+    tuning_params = lattice_planner.car.report_parameters()
+    filename = "saved_simulations/tuning_params.txt"
+    with open(filename, "w") as f:
+        for key, value in tuning_params.items():
+            f.write(f"{key}: {value}\n")
+
+        f.write(f"\nPath planning completed in {time.time() - start_time:.3f}s\n")
+        f.write(f"States explored: {lattice_planner.nodes_explored}\n")
+        f.write(f"Found optimal path with {len(command_sequence)} commands\n")
+        f.write(
+            f"Simulated time: {len(command_sequence) * lattice_planner.primitive_duration:.3f}s\n"
+        )
+
+        print(f"\nPath planning completed in {time.time() - start_time:.3f}s")
+        print(f"States explored: {lattice_planner.nodes_explored}")
+        print(f"Found optimal path with {len(command_sequence)} commands")
+        print(f"Simulated time: {len(command_sequence) * lattice_planner.primitive_duration:.3f}s")
 
 
 def execute_phase2(simulation, integrated_controller):
@@ -381,7 +334,7 @@ if __name__ == "__main__":
 
     if integrated_controller:
         # Phase 2: Execution
-        execute_phase2(sim, integrated_controller)
+        # execute_phase2(sim, integrated_controller)
         pass
     else:
         print("Phase 2 planning failed!")

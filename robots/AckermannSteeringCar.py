@@ -53,11 +53,11 @@ class AckermannSteeringCar:
         self,
         start_pose: ContinuousPose,
         wheel_base: float = 0.25,
-        wheel_radius: float = 0.05,
+        wheel_radius: float = 1,
         wheel_width: float = 0.04,
         wheel_offset: float = 0.03,
-        max_steering_angle: float = np.radians(35),
-        max_angular_velocity: float = 1.0,
+        max_wheel_steering_angle: float = np.radians(35),
+        wheel_angular_velocity: float = 1.0,
         length: float = 0.3,
         width: float = 0.2,
         reference_point: str = "rear",
@@ -65,29 +65,21 @@ class AckermannSteeringCar:
         # Physical parameters
         self.length: float = length  # Car length (meters)
         self.width: float = width  # Car width (meters)
-        self.wheel_base: float = (
-            wheel_base  # Distance between front and rear axles (meters)
-        )
+        self.wheel_base: float = wheel_base  # Distance between front and rear axles (meters)
         self.wheel_radius: float = wheel_radius  # Wheel radius (meters)
         self.wheel_width: float = wheel_width  # Width of wheel (meters)
-        self.wheel_offset: float = (
-            wheel_offset  # How far wheels extend beyond the body (meters)
-        )
+        self.wheel_offset: float = wheel_offset  # How far wheels extend beyond the body (meters)
         self.reference_point = reference_point
         # Physical constraints
-        self.max_steering_angle: float = (
-            max_steering_angle  # Maximum steering angle (rad)
+        self.max_wheel_steering_angle: float = (
+            max_wheel_steering_angle  # Maximum steering angle (rad)
         )
-        self.max_angular_velocity: float = (
-            max_angular_velocity  # Maximum angular velocity (rad/s)
-        )
+        self.wheel_angular_velocity: float = wheel_angular_velocity  # angular velocity (rad/s)
         # State variables
         self.pose = start_pose  # (x, y, theta)
-        self.steering_angle: float = 0.0  # Front wheel steering angle (radians)
-        self.v: float = 0.0  # Linear velocity (m/s)
-        self.omega: float = (
-            0.0  # Angular velocity (rad/s) - derived from steering angle and velocity
-        )
+        self.wheel_steering_angle: float = 0.0  # Front wheel steering angle (radians)
+        self.linear_velocity: float = 0.0  # Linear velocity (m/s) (v = wheel_ω * radius)
+        self.car_angular_velocity = 0.0  # Angular velocity (rad/s) (ω = v*tan(φ)/L)
 
     def update_state(self, dt: float):
         """
@@ -100,15 +92,18 @@ class AckermannSteeringCar:
         dt: Time step in seconds
         """
         # Calculate angular velocity from steering angle (bicycle model) θ̇ = v * tan(φ) / L
-        if abs(self.v) > 1e-5:  # Only update angular velocity if car is moving
-            self.omega = self.v * np.tan(self.steering_angle) / self.wheel_base
+        if abs(self.linear_velocity) > 1e-5:
+            self.car_angular_velocity = (
+                self.linear_velocity * np.tan(self.wheel_steering_angle) / self.wheel_base
+            )
         else:
-            self.omega = 0
+            # Only update angular velocity if car is moving
+            self.car_angular_velocity = 0
 
         # Update state using Ackermann kinematics
-        self.x += self.v * np.cos(self.theta) * dt
-        self.y += self.v * np.sin(self.theta) * dt
-        self.theta = get_principal_value(self.theta + self.omega * dt)
+        self.x += self.linear_velocity * np.cos(self.theta) * dt
+        self.y += self.linear_velocity * np.sin(self.theta) * dt
+        self.theta = get_principal_value(self.theta + self.car_angular_velocity * dt)
 
     def set_control_inputs(self, v: float, steering_angle: float):
         """
@@ -120,8 +115,8 @@ class AckermannSteeringCar:
         v: Desired linear velocity (m/s)
         steering_angle: Desired steering angle (radians)
         """
-        self.v = v
-        self.steering_angle = steering_angle
+        self.linear_velocity = v
+        self.wheel_steering_angle = steering_angle
 
     def get_corners(self) -> List[Tuple[float, float]]:
         """
@@ -191,7 +186,7 @@ class AckermannSteeringCar:
         right_wheel_y = front_center_y + (width / 2 + wheel_offset) * -cos_theta
 
         # Calculate the direction of the wheels
-        wheel_angle = self.theta + self.steering_angle
+        wheel_angle = self.theta + self.wheel_steering_angle
         wheel_cos = np.cos(wheel_angle)
         wheel_sin = np.sin(wheel_angle)
 
@@ -208,6 +203,41 @@ class AckermannSteeringCar:
             (left_wheel_x, left_wheel_y, left_wheel_end_x, left_wheel_end_y),
             (right_wheel_x, right_wheel_y, right_wheel_end_x, right_wheel_end_y),
         ]
+
+    def report_parameters(self):
+        """
+        Report car parameters
+        """
+        return {
+            "Type": type(self).__name__,
+            "wheel_base": self.wheel_base,
+            "wheel_radius": self.wheel_radius,
+            "wheel_width": self.wheel_width,
+            "wheel_offset": self.wheel_offset,
+            "max_wheel_steering_angle": self.max_wheel_steering_angle,
+            "wheel_angular_velocity": self.wheel_angular_velocity,
+            "length": self.length,
+            "width": self.width,
+            "reference_point": self.reference_point,
+        }
+
+    def __copy__(self):
+        """
+        Create a copy of the car
+        """
+        return AckermannSteeringCar(
+            self.pose,
+            wheel_base=self.wheel_base,
+            wheel_radius=self.wheel_radius,
+            wheel_width=self.wheel_width,
+            wheel_offset=self.wheel_offset,
+            max_wheel_steering_angle=self.max_wheel_steering_angle,
+            wheel_angular_velocity=self.wheel_angular_velocity,
+            length=self.length,
+            width=self.width,
+            reference_point=self.reference_point,
+        )
+
 
 @staticmethod
 def get_principal_value(angle: float) -> float:

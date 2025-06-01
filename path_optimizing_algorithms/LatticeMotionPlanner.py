@@ -1,14 +1,22 @@
 import math
-import numpy as np
 import heapq
-from typing import List, Tuple, Dict, Optional
-from dataclasses import dataclass
 import time
+import copy
+
+from typing import List, Tuple, Optional
+from dataclasses import dataclass
 from enum import Enum
+
+import numpy as np
 import matplotlib.pyplot as plt
 
 from maps.OccupancyGrid import OccupancyGrid
-from robots.AckermannSteeringCar import AckermannSteeringCar, ContinuousPose, DiscretePose, get_principal_value
+from robots.AckermannSteeringCar import (
+    AckermannSteeringCar,
+    ContinuousPose,
+    DiscretePose,
+    get_principal_value,
+)
 
 
 class SteeringCommand(Enum):
@@ -58,9 +66,6 @@ class DiscreteLatticeMotionPlanner:
         grid: OccupancyGrid,
         angular_velocity: float = 0.5,
         steering_angle: float = 15,
-        wheelbase: float = 0.25,
-        wheelradius: float = 1,
-        reference_point: str = "rear",
         primitive_duration: float = 0.5,
         num_angle_discretizations: int = 256,
         heading_alignment_weight: float = 0.05,
@@ -68,12 +73,14 @@ class DiscreteLatticeMotionPlanner:
         goal_alignment_threshold: float = 0.5,
         min_progress_threshold: float = 0.0,
     ):
+        self.car = copy.copy(car)  # Dummy copy of car
         self.grid = grid  # OccupancyGrid instance
-        self.angular_velocity = angular_velocity  # Fixed angular velocity when turning (rad/s)
-        
-        self.wheel_base = car.wheel_base  # Distance between axles (m)
-        self.wheel_radius = wheelradius
-        self.reference_point = car.reference_point
+
+        self.car.wheel_angular_velocity = (
+            angular_velocity  # Fixed angular velocity when turning (rad/s)
+        )
+
+        # Planner parameters
         self.primitive_duration = primitive_duration  # Duration of each motion primitive (s)
         self.num_angles = num_angle_discretizations  # Number of discrete heading angles
 
@@ -84,19 +91,20 @@ class DiscreteLatticeMotionPlanner:
             SteeringCommand.RIGHT: np.radians(-steering_angle),
         }
 
-        # Calculate linear velocities for each steering command
-        # For fixed angular velocity: v = ω * R, where R = L/tan(φ)
+        # For fixed angular velocity: v = ω * r
 
-        # Basic wheel speed to linear speed
-        self.linear_velocity = self.angular_velocity * self.wheel_radius
+        self.angular_velocity = angular_velocity  # Fixed angular velocity when turning (rad/s)
+
+        # Wheel speed to linear speed
+        self.linear_velocity = self.angular_velocity * self.car.wheel_radius
 
         # Resolution for discretization
         self.resolution = grid.resolution
         self.angle_resolution = 2 * np.pi / num_angle_discretizations
 
         # Goal tolerance
-        self.goal_tolerance = 1  # grid cells - much tighter tolerance
-        self.goal_theta_tolerance = self.num_angles  # angle indices - tighter tolerance
+        self.goal_tolerance = 5  # grid cells
+        self.goal_theta_tolerance = self.num_angles  # angle indices
 
         self.helpful_turn_penalty: float = 0.25  # Penalty for turns toward goal
         self.harmful_turn_penalty: float = 7.0  # Penalty for turns away from goal
@@ -122,7 +130,9 @@ class DiscreteLatticeMotionPlanner:
         Calculate the progress made by a motion primitive towards the goal.
         """
         # Calculate the distance to the goal after applying the primitive
-        next_x, next_y, next_theta = apply_motion_primitive((0.0, 0.0, 0.0), primitive.end_displacement)
+        next_x, next_y, next_theta = apply_motion_primitive(
+            (0.0, 0.0, 0.0), primitive.end_displacement
+        )
         distance_to_goal = np.sqrt((self.goal_x - next_x) ** 2 + (self.goal_y - next_y) ** 2)
 
         goal_direction = self.calculate_goal_direction(next_x, next_y)
@@ -163,11 +173,7 @@ class DiscreteLatticeMotionPlanner:
                     y += self.linear_velocity * np.sin(theta) * dt
                     # Calculate angular velocity (same as car)
                     if abs(self.linear_velocity) > 1e-5:
-                        omega = (
-                            self.linear_velocity
-                            * np.tan(steering_angle)
-                            / self.wheel_base
-                        )
+                        omega = self.linear_velocity * np.tan(steering_angle) / self.car.wheel_base
                     else:
                         omega = 0
 
@@ -188,9 +194,7 @@ class DiscreteLatticeMotionPlanner:
                     cost = distance * (1 + abs(end_displacement[2]))
 
                 # Calculate turn characteristics
-                angular_change = abs(
-                    end_displacement[2]
-                )  # How much the heading changes
+                angular_change = abs(end_displacement[2])  # How much the heading changes
                 turn_direction = (
                     "straight"
                     if steering_cmd == SteeringCommand.NEUTRAL
@@ -210,9 +214,7 @@ class DiscreteLatticeMotionPlanner:
 
                 self.motion_primitives[angle_idx][steering_cmd] = primitive
 
-        print(
-            f"Generated {len(self.motion_primitives) * len(SteeringCommand)} motion primitives"
-        )
+        print(f"Generated {len(self.motion_primitives) * len(SteeringCommand)} motion primitives")
 
     def plan_discrete_path(
         self,
@@ -308,12 +310,8 @@ class DiscreteLatticeMotionPlanner:
 
             # Calculate goal progress for each primitive
             primitive_progress = {}
-            for steering_cmd, primitive in self.motion_primitives[
-                current_angle_idx
-            ].items():
-                primitive_progress[steering_cmd] = self.calculate_goal_progress(
-                    primitive
-                )
+            for steering_cmd, primitive in self.motion_primitives[current_angle_idx].items():
+                primitive_progress[steering_cmd] = self.calculate_goal_progress(primitive)
 
             # Sort primitives by goal progress
             sorted_primitives = sorted(
@@ -354,9 +352,7 @@ class DiscreteLatticeMotionPlanner:
                     current_node.continuous_pose.x, current_node.continuous_pose.y
                 )
 
-                new_theta = (
-                    current_node.continuous_pose.theta + primitive.end_displacement[2]
-                )
+                new_theta = current_node.continuous_pose.theta + primitive.end_displacement[2]
 
                 if primitive.steering_command == SteeringCommand.NEUTRAL:
                     turn_penalty = 1.0  # No penalty for straight
@@ -380,8 +376,7 @@ class DiscreteLatticeMotionPlanner:
                 # Apply straightness bonus for consecutive NEUTRAL steering
                 if (
                     current_node.primitive_used is not None
-                    and current_node.primitive_used.steering_command
-                    == SteeringCommand.NEUTRAL
+                    and current_node.primitive_used.steering_command == SteeringCommand.NEUTRAL
                     and primitive.steering_command == SteeringCommand.NEUTRAL
                 ):
                     # Apply bonus for consecutive straight motions
@@ -390,8 +385,7 @@ class DiscreteLatticeMotionPlanner:
                 # Add switching penalty if changing steering direction
                 if (
                     current_node.primitive_used is not None
-                    and current_node.primitive_used.steering_command
-                    != primitive.steering_command
+                    and current_node.primitive_used.steering_command != primitive.steering_command
                 ):
                     tentative_g += 0.5  # Small penalty for switching
 
@@ -410,9 +404,7 @@ class DiscreteLatticeMotionPlanner:
                         world_trajectory.append((x_world, y_world, theta_world))
 
                     # Create new search node - Phase 1: Include theta in heuristic
-                    h_score = self._heuristic(
-                        next_x, next_y, next_theta, goal_x, goal_y
-                    )
+                    h_score = self._heuristic(next_x, next_y, next_theta, goal_x, goal_y)
                     f_score = tentative_g + h_score
 
                     next_node = SearchNode(
@@ -527,9 +519,7 @@ class DiscreteLatticeMotionPlanner:
         theta_norm = (theta_norm + 2 * np.pi) % (2 * np.pi)  # Then to [0, 2π)
 
         # convert to index
-        theta_idx: int = (
-            math.floor(theta_norm / self.angle_resolution) % self.num_angles
-        )
+        theta_idx: int = math.floor(theta_norm / self.angle_resolution) % self.num_angles
 
         return x_idx, y_idx, theta_idx
 
@@ -610,11 +600,8 @@ class DiscreteLatticeMotionPlanner:
         Returns a value between -π and π.
         """
         return (angle2 - angle1) % (2 * np.pi)
-        
 
-    def _heuristic(
-        self, x: float, y: float, theta: float, goal_x: float, goal_y: float
-    ) -> float:
+    def _heuristic(self, x: float, y: float, theta: float, goal_x: float, goal_y: float) -> float:
         """
         Phase 1: Enhanced heuristic with heading alignment
         Combines distance and heading alignment to encourage "angle first, then go straight" behavior
@@ -671,9 +658,7 @@ class DiscreteLatticeMotionPlanner:
         This shows how to convert primitives to actual car commands.
         """
         for i, primitive in enumerate(command_sequence):
-            print(
-                f"Step {i+1}: {primitive.steering_command.value} for {primitive.duration}s"
-            )
+            print(f"Step {i+1}: {primitive.steering_command.value} for {primitive.duration}s")
 
             # Set steering angle based on command
             steering_angle = self.steering_angles[primitive.steering_command]

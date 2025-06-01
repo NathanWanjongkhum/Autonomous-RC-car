@@ -289,18 +289,14 @@ class Simulation:
             (line,) = self.ax.plot([x1, x2], [y1, y2], "r-", linewidth=2)
             self.steering_lines.append(line)
 
-            # Draw the wheel itself as a small rectangle
-            wheel_length = self.car.wheel_radius * 2
-            wheel_width = wheel_length / 2
-
             # Calculate wheel angle
             wheel_angle = np.arctan2(y2 - y1, x2 - x1)
 
             # Create wheel patch
             wheel_patch = patches.Rectangle(
                 (
-                    x1 - self.car.wheel_width / 2,
-                    y1 - self.car.wheel_width / 2,
+                    x1 - self.car.wheel_radius,
+                    y1 - self.car.wheel_radius,
                 ),  # xy position (centered on wheel)
                 self.car.wheel_radius * 2,  # width
                 self.car.wheel_width,  # height
@@ -336,10 +332,6 @@ class Simulation:
                 + (self.car.width / 2 + self.car.wheel_offset) * -cos_theta,
             ),
         ]
-
-        # Draw rear wheels (parallel to car orientation)
-        wheel_length = self.car.wheel_radius * 2
-        wheel_width = wheel_length / 2
 
         # Create occupancy grid visualization
         grid_img = np.zeros((self.grid.grid_height, self.grid.grid_width, 4))
