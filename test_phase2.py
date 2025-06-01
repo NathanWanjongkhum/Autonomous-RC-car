@@ -15,24 +15,22 @@ mplstyle.use(["dark_background", "fast"])
 
 from path_optimizing_algorithms.LatticeMotionPlanner import (
     DiscreteLatticeMotionPlanner,
-    apply_motion_primitive,
-    SteeringCommand,
 )
 import numpy as np
 
 
 def generate_grid(
-    width: int, height: int, grid_type: str = "empty"
+    width: int, height: int, resolution: float = 0.1, grid_type: str = "empty"
 ) -> tuple[OccupancyGrid, ContinuousPose, ContinuousPose]:
     # Generate an empty grid with resolution that balances accuracy and performance
     grid = OccupancyGrid(
         width=width,
         height=height,
-        resolution=0.1,  # Balance between accuracy and computational efficiency
+        resolution=resolution,  # Balance between accuracy and computational efficiency
     )
 
-    adjusted_width = grid.binary_grid.shape[0]
-    adjusted_height = grid.binary_grid.shape[1]
+    grid_width = grid.grid_width
+    grid_height = grid.grid_height
 
     match grid_type:
         case "empty":
@@ -40,78 +38,76 @@ def generate_grid(
             pass
         case "corridor":
             # Outer walls
-            for i in range(adjusted_width):
-                grid.binary_grid[i, 0] = 1  # Bottom wall
-                grid.binary_grid[i, adjusted_height - 1] = 1  # Top wall
-            for i in range(adjusted_height):
-                grid.binary_grid[0, i] = 1  # Left wall
-                grid.binary_grid[adjusted_width - 1, i] = 1  # Right wall
+            for i in range(grid_width):
+                grid.update_cell(i, 0, True)  # Bottom wall
+                grid.update_cell(i, grid_height - 1, True)  # Top wall
+            for i in range(grid_height):
+                grid.update_cell(0, i, True)  # Left wall
+                grid.update_cell(grid_width - 1, i, True)  # Right wall
 
             # Clear a horizontal path in the middle
-            corridor_start_y = int(adjusted_height / 2) - 1
-            corridor_end_y = int(adjusted_height / 2) + 1
-            for x in range(1, adjusted_width - 1):
+            corridor_start_y = int(grid_height / 2) - 1
+            corridor_end_y = int(grid_height / 2) + 1
+            for x in range(1, grid_width - 1):
                 for y in range(corridor_start_y, corridor_end_y + 1):
-                    grid.binary_grid[x, y] = 0  # Clear inner area
+                    grid.update_cell(x, y, False)  # Clear inner area
         case "aligned corridor":
             # Vertical wall
-            for x in list(range(adjusted_width // 4 - 1, adjusted_width // 4 + 1)):
-                for y in list(range(adjusted_height - 1)):
-                    grid.binary_grid[x, y] = True
+            for x in list(range(grid_width // 4 - 5, grid_width // 4 + 5)):
+                for y in list(range(grid_height - 1)):
+                    grid.update_cell(x, y, True)
 
             # Gap in the middle of the wall
-            for x in list(range(adjusted_width // 4 - 1, adjusted_width // 4 + 1)):
-                for y in list(
-                    range(math.floor(adjusted_height / 4), math.floor(adjusted_height / 2))
-                ):
-                    grid.binary_grid[x, y] = False
+            for x in list(range(grid_width // 4 - 5, grid_width // 4 + 5)):
+                for y in list(range(math.floor(grid_height / 4), math.floor(grid_height / 2))):
+                    grid.update_cell(x, y, False)
 
             # Vertical wall
-            for x in list(range(adjusted_width // 2 - 1, adjusted_width // 2 + 1)):
-                for y in list(range(adjusted_height - 1)):
-                    grid.binary_grid[x, y] = True
+            for x in list(range(grid_width // 2 - 5, grid_width // 2 + 5)):
+                for y in list(range(grid_height - 1)):
+                    grid.update_cell(x, y, True)
 
             # Gap in the middle of the wall
-            for x in list(range(adjusted_width // 2 - 1, adjusted_width // 2 + 1)):
-                for y in list(range(math.floor(3 * adjusted_height / 4), adjusted_height - 1)):
-                    grid.binary_grid[x, y] = False
+            for x in list(range(grid_width // 2 - 5, grid_width // 2 + 5)):
+                for y in list(range(math.floor(3 * grid_height / 4), grid_height - 1)):
+                    grid.update_cell(x, y, False)
         case "obstacles":
             # Outer walls
-            for i in range(adjusted_width):
-                grid.binary_grid[i, 0] = 1  # Bottom wall
-                grid.binary_grid[i, adjusted_height - 1] = 1  # Top wall
-            for i in range(adjusted_height):
-                grid.binary_grid[0, i] = 1  # Left wall
-                grid.binary_grid[adjusted_width - 1, i] = 1  # Right wall
+            for i in range(grid_width):
+                grid.update_cell(i, 0, True)  # Bottom wall
+                grid.update_cell(i, grid_height - 1, True)  # Top wall
+            for i in range(grid_height):
+                grid.update_cell(0, i, True)  # Left wall
+                grid.update_cell(grid_width - 1, i, True)  # Right wall
 
             # Add some obstacles that allow a path, defined in world coordinates
             # A few blocks in the top-left (relative to world dimensions)
-            ox1, oy1 = grid._discretize_state(adjusted_width * 0.2, adjusted_height * 0.2)
-            grid.binary_grid[oy1, ox1] = 1
-            grid.binary_grid[oy1 + 1, ox1] = 1
-            grid.binary_grid[oy1, ox1 + 1] = 1
-            grid.binary_grid[oy1 + 1, ox1 + 1] = 1
+            ox1, oy1 = grid._discretize_state(grid_width * 0.2, grid_height * 0.2)
+            grid.update_cell(oy1, ox1, True)
+            grid.update_cell(oy1 + 1, ox1, True)
+            grid.update_cell(oy1, ox1 + 1, True)
+            grid.update_cell(oy1 + 1, ox1 + 1, True)
 
             # A few blocks in the bottom-right (relative to world dimensions)
-            ox2, oy2 = grid._discretize_state(adjusted_width * 0.8, adjusted_height * 0.8)
-            grid.binary_grid[oy2, ox2] = 1
-            grid.binary_grid[oy2 + 1, ox2] = 1
-            grid.binary_grid[oy2, ox2 + 1] = 1
-            grid.binary_grid[oy2 + 1, ox2 + 1] = 1
+            ox2, oy2 = grid._discretize_state(grid_width * 0.8, grid_height * 0.8)
+            grid.update_cell(oy2, ox2, True)
+            grid.update_cell(oy2 + 1, ox2, True)
+            grid.update_cell(oy2, ox2 + 1, True)
+            grid.update_cell(oy2 + 1, ox2 + 1, True)
 
             # A long obstacle in the middle, leaving space above and below
             # Define start and end world coordinates for the obstacle
-            obs_start_x_world = adjusted_width * 0.3
-            obs_end_x_world = adjusted_width * 0.7
-            obs_y_world = adjusted_height / 2
+            obs_start_x_world = grid_width * 0.3
+            obs_end_x_world = grid_width * 0.7
+            obs_y_world = grid_height / 2
 
             # Convert to grid coordinates
             obs_start_x_grid, obs_y_grid = grid._discretize_state(obs_start_x_world, obs_y_world)
             obs_end_x_grid, _ = grid._discretize_state(obs_end_x_world, obs_y_world)
 
             for i in range(obs_start_x_grid, obs_end_x_grid + 1):
-                grid.binary_grid[obs_y_grid, i] = 1
-                grid.binary_grid[obs_y_grid + 1, i] = 1
+                grid.update_cell(obs_y_grid, i, True)
+                grid.update_cell(obs_y_grid + 1, i, True)
 
     # Position start and goal to allow path planning around obstacles
     start_x = width * 0.1
@@ -141,13 +137,14 @@ def transition_to_phase2(
 
     start_time = time.time()
 
-    # Step 1: Process the occupancy grid from exploration
+    # Process the occupancy grid from exploration
     print("Processing occupancy grid...")
-    # simulation.grid.process_map()  # Clean up noise from exploration
+    simulation.grid.process_map()  # Clean up noise from exploration
 
     fig, ax = plt.subplots(1, 1, figsize=(12, 10))
 
-    # Step 3: Create and configure the lattice planner
+    #  Create and configure the lattice planner
+    print("Planning optimal trajectory...")
     lattice_planner = DiscreteLatticeMotionPlanner(
         car=simulation.car,
         grid=simulation.grid,
@@ -157,8 +154,7 @@ def transition_to_phase2(
         min_progress_threshold=0.0,
     )
 
-    # Step 4: Plan the optimal trajectory
-    print("Planning optimal trajectory...")
+    # Plan the optimal trajectory
     command_sequence = lattice_planner.plan_discrete_path(
         start_pose.x,
         start_pose.y,
@@ -192,9 +188,9 @@ def transition_to_phase2(
     plot_filename = "saved_simulations/trajectory_plot.png"
     fig.savefig(plot_filename)
 
-    plt.show(block=True)
-
+    # Puase for visualization
     print("Displaying occupancy grid and markers. Close the plot to continue.")
+    plt.show(block=True)
 
     # Create the pure pursuit controller
     pure_pursuit = ConstantPurePursuitController(
@@ -323,7 +319,7 @@ if __name__ == "__main__":
     # print("=== PHASE 2: RACING LINE OPTIMIZATION ===")
     grid_width = 20
     grid_height = 20
-    grid, start_pose, goal_pose = generate_grid(grid_width, grid_height, "aligned corridor")
+    grid, start_pose, goal_pose = generate_grid(grid_width, grid_height, 0.1, "aligned corridor")
 
     car = AckermannSteeringCar(start_pose, reference_point="rear")
 
@@ -332,9 +328,9 @@ if __name__ == "__main__":
     # Intermediate Phase: Planning
     integrated_controller = transition_to_phase2(sim, start_pose, goal_pose)
 
-    if integrated_controller:
-        # Phase 2: Execution
-        # execute_phase2(sim, integrated_controller)
-        pass
-    else:
-        print("Phase 2 planning failed!")
+    # if integrated_controller:
+    #     # Phase 2: Execution
+    #     # execute_phase2(sim, integrated_controller)
+    #     pass
+    # else:
+    #     print("Phase 2 planning failed!")

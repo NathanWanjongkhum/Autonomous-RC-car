@@ -67,8 +67,8 @@ class OccupancyGrid:
         grid_y = math.floor(y / self.resolution)
 
         # Ensure within grid bounds
-        grid_x = np.clip(grid_x, 0, self.grid_width - 1)
-        grid_y = np.clip(grid_y, 0, self.grid_height - 1)
+        # grid_x = np.clip(grid_x, 0, self.grid_width - 1)
+        # grid_y = np.clip(grid_y, 0, self.grid_height - 1)
 
         return grid_x, grid_y
 
@@ -99,7 +99,7 @@ class OccupancyGrid:
         grid_x, grid_y = self._discretize_state(x, y)
         return self.binary_grid[grid_y, grid_x]
 
-    def update_cell(self, x, y, occupied):
+    def update_cell(self, idx, idy, occupied):
         """
         Update a single cell with an observation using log-odds
 
@@ -107,26 +107,22 @@ class OccupancyGrid:
         x, y: World coordinates
         occupied: Boolean indicating if cell is observed as occupied
         """
-        grid_x, grid_y = self._discretize_state(x, y)
-
         # Update log-odds
         # This is the Bayesian update in log-odds form
         if occupied:
-            self.log_odds_grid[grid_y, grid_x] += self.lo_occ
+            self.log_odds_grid[idx, idy] += self.lo_occ
         else:
-            self.log_odds_grid[grid_y, grid_x] += self.lo_free
+            self.log_odds_grid[idx, idy] += self.lo_free
 
         # Convert back to probability
         # p = 1 - 1/(1 + exp(log_odds))
-        p = 1 - (1 / (1 + np.exp(self.log_odds_grid[grid_y, grid_x])))
-        self.grid[grid_y, grid_x] = p
+        p = 1 - (1 / (1 + np.exp(self.log_odds_grid[idx, idy])))
+        self.grid[idx, idy] = p
 
         # Update binary grid
-        self.binary_grid[grid_y, grid_x] = p > self.occupancy_threshold
+        self.binary_grid[idx, idy] = p > self.occupancy_threshold
 
-    def update_from_lidar(
-        self, sensor_x, sensor_y, sensor_theta, ranges, angles, max_range
-    ):
+    def update_from_lidar(self, sensor_x, sensor_y, sensor_theta, ranges, angles, max_range):
         """
         Update the grid from lidar-like scan
 
@@ -240,7 +236,7 @@ class OccupancyGrid:
         It's useful to run after mapping to get a cleaner map for path planning.
         """
         # Apply Gaussian filter to smooth the probability grid
-        smoothed_grid = gaussian_filter(self.grid, sigma=0.5)
+        smoothed_grid = gaussian_filter(self.grid, sigma=1)
 
         # Threshold to get binary grid
         self.binary_grid = smoothed_grid > self.occupancy_threshold
