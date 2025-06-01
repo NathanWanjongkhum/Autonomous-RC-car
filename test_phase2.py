@@ -52,23 +52,32 @@ def generate_grid(
                 for y in range(corridor_start_y, corridor_end_y + 1):
                     grid.update_cell(x, y, False)  # Clear inner area
         case "aligned corridor":
+            wall_thickness = 2
             # Vertical wall
-            for x in list(range(grid_width // 4 - 5, grid_width // 4 + 5)):
+            for x in list(
+                range(grid_width // 4 - wall_thickness, grid_width // 4 + wall_thickness)
+            ):
                 for y in list(range(grid_height - 1)):
                     grid.update_cell(x, y, True)
 
             # Gap in the middle of the wall
-            for x in list(range(grid_width // 4 - 5, grid_width // 4 + 5)):
+            for x in list(
+                range(grid_width // 4 - wall_thickness, grid_width // 4 + wall_thickness)
+            ):
                 for y in list(range(math.floor(grid_height / 4), math.floor(grid_height / 2))):
                     grid.update_cell(x, y, False)
 
             # Vertical wall
-            for x in list(range(grid_width // 2 - 5, grid_width // 2 + 5)):
+            for x in list(
+                range(grid_width // 2 - wall_thickness, grid_width // 2 + wall_thickness)
+            ):
                 for y in list(range(grid_height - 1)):
                     grid.update_cell(x, y, True)
 
             # Gap in the middle of the wall
-            for x in list(range(grid_width // 2 - 5, grid_width // 2 + 5)):
+            for x in list(
+                range(grid_width // 2 - wall_thickness, grid_width // 2 + wall_thickness)
+            ):
                 for y in list(range(math.floor(3 * grid_height / 4), grid_height - 1)):
                     grid.update_cell(x, y, False)
         case "obstacles":
@@ -152,6 +161,7 @@ def transition_to_phase2(
         primitive_duration=0.1,
         num_angle_discretizations=64,
         min_progress_threshold=0.0,
+        straightness_bonus=0.0,  # Add straightness bonus
     )
 
     # Plan the optimal trajectory
@@ -317,8 +327,8 @@ if __name__ == "__main__":
     # Initialize the occupancy grid
     print("=== TESTING PHASE 2 ===")
     # print("=== PHASE 2: RACING LINE OPTIMIZATION ===")
-    grid_width = 20
-    grid_height = 20
+    grid_width = 5
+    grid_height = 5
     grid, start_pose, goal_pose = generate_grid(grid_width, grid_height, 0.1, "aligned corridor")
 
     car = AckermannSteeringCar(start_pose, reference_point="rear")

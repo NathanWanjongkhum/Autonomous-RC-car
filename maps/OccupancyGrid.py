@@ -67,8 +67,8 @@ class OccupancyGrid:
         grid_y = math.floor(y / self.resolution)
 
         # Ensure within grid bounds
-        # grid_x = np.clip(grid_x, 0, self.grid_width - 1)
-        # grid_y = np.clip(grid_y, 0, self.grid_height - 1)
+        grid_x = np.clip(grid_x, 0, self.grid_width - 1)
+        grid_y = np.clip(grid_y, 0, self.grid_height - 1)
 
         return grid_x, grid_y
 
@@ -96,8 +96,7 @@ class OccupancyGrid:
         Returns:
         bool: True if occupied, False otherwise
         """
-        grid_x, grid_y = self._discretize_state(x, y)
-        return self.binary_grid[grid_y, grid_x]
+        return self.binary_grid[x, y]
 
     def update_cell(self, idx, idy, occupied):
         """
@@ -118,9 +117,6 @@ class OccupancyGrid:
         # p = 1 - 1/(1 + exp(log_odds))
         p = 1 - (1 / (1 + np.exp(self.log_odds_grid[idx, idy])))
         self.grid[idx, idy] = p
-
-        # Update binary grid
-        self.binary_grid[idx, idy] = p > self.occupancy_threshold
 
     def update_from_lidar(self, sensor_x, sensor_y, sensor_theta, ranges, angles, max_range):
         """

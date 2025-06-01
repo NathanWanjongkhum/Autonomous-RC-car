@@ -541,9 +541,9 @@ class DiscreteLatticeMotionPlanner:
     ) -> bool:
         """Check if executing this primitive from start position is collision-free"""
         # Vehicle dimensions and safety margin (in meters)
-        vehicle_length = 0.3
-        vehicle_width = 0.15
-        safety_margin = 0.5
+        vehicle_length = self.car.length
+        vehicle_width = self.car.width
+        safety_margin = 0
         total_margin = safety_margin + max(vehicle_length, vehicle_width) / 2
 
         # Sample points along trajectory more densely
@@ -551,7 +551,7 @@ class DiscreteLatticeMotionPlanner:
         t = 0
         while t <= primitive.duration:
             # Get state at this time
-            idx = int(t / 0.05)  # Match dt from _generate_motion_primitives
+            idx = int(t / dt)  # Match dt from _generate_motion_primitives
             if idx >= len(primitive.trajectory):
                 break
             x_local, y_local, theta_local = primitive.trajectory[idx]
@@ -576,8 +576,8 @@ class DiscreteLatticeMotionPlanner:
             margin_cells = int(total_margin / self.grid.resolution)
 
             # Check a rectangular region around the point
-            check_x = int(grid_x) + 5
-            check_y = int(grid_y) + 5
+            check_x = int(grid_x) + margin_cells
+            check_y = int(grid_y) + margin_cells
 
             if (
                 check_x < 0
@@ -585,7 +585,7 @@ class DiscreteLatticeMotionPlanner:
                 or check_y < 0
                 or check_y >= self.grid.grid_height
             ):
-                continue
+                return False
 
             if self.grid.binary_grid[check_y, check_x]:
                 return False
@@ -858,7 +858,7 @@ def phase2_discrete_planning(
         wheelbase=wheelbase,
         primitive_duration=primitive_duration,
         num_angle_discretizations=64,  # Increased angle discretization for smoother paths
-        straightness_bonus=-0.5,  # Add straightness bonus
+        straightness_bonus=0.5,  # Add straightness bonus
     )
 
     # Plan the command sequence
